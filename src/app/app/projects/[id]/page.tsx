@@ -3,7 +3,8 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   Background, Controls, MiniMap, MarkerType,
-  addEdge, Connection, Edge, Node, OnConnect, OnEdgesDelete, OnNodesDelete, useReactFlow
+  addEdge, Connection, Edge, Node, OnConnect, OnEdgesDelete, OnNodesDelete,
+  ReactFlowProvider, useReactFlow
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { supabase } from '@/lib/supabaseClient';
@@ -39,7 +40,16 @@ const edgeTypes = {
   data: DataEdge,
 };
 
-export default function ProjectCanvas() {
+// Outer wrapper so ReactFlowProvider is above any hook usage
+export default function ProjectCanvasPage() {
+  return (
+    <ReactFlowProvider>
+      <ProjectCanvasInner />
+    </ReactFlowProvider>
+  );
+}
+
+function ProjectCanvasInner() {
   const params = useParams();
   const projectId = params.id as string;
   const [view, setView] = useState<'process'|'information'|'opportunities'>('process');
@@ -187,15 +197,10 @@ export default function ProjectCanvas() {
     return edges;
   }, [edges, view]);
 
-  const metrics = useMemo(() => {
-    const visible = decisions.filter(d => {
-      if (view === 'information') return d.kind === 'data';
-      if (view === 'opportunities') return d.kind === 'opportunity';
-      return true;
-    });
-    const total = visible.reduce((acc, d) => acc + (d.estimated_duration_min || 0), 0);
-    return { totalMinutes: total };
-  }, [decisions, view]);
+  const totalMinutes = useMemo(
+    () => decisions.reduce((acc, d) => acc + (d.estimated_duration_min || 0), 0),
+    [decisions]
+  );
 
   return (
     <div className="relative m-4 rounded-2xl border" style={{ backgroundColor: '#F5F3EA' }}>
@@ -225,7 +230,7 @@ export default function ProjectCanvas() {
       </div>
 
       <div className="absolute bottom-2 left-2 text-xs bg-white/80 rounded px-2 py-1 shadow">
-        {view === 'process' && <>Process time (sum visible): {metrics.totalMinutes} min</>}
+        {view === 'process' && <>Process time (sum visible): {totalMinutes} min</>}
         {view === 'information' && <>Information nodes: {decisions.filter(d=>d.kind==='data').length}</>}
         {view === 'opportunities' && <>Opportunities: {decisions.filter(d=>d.kind==='opportunity').length}</>}
       </div>
