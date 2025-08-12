@@ -11,18 +11,22 @@ import { supabase } from '@/lib/supabaseClient';
 import CanvasToolbar from '@/components/CanvasToolbar';
 import SipocInspector from '@/components/SipocInspector';
 import StickyNode from '@/components/nodes/StickyNode';
+import GatewayNode from '@/components/nodes/GatewayNode';
 import ProcessEdge from '@/components/edges/ProcessEdge';
 import DataEdge from '@/components/edges/DataEdge';
+
+type K = 'decision'|'data'|'opportunity'|'gateway';
 
 type Decision = {
   id: string;
   project_id: string;
-  kind: 'decision'|'data'|'opportunity';
+  kind: K;
   title: string;
   statement: string | null;
   x: number | null;
   y: number | null;
-  estimated_duration_min: number | null;
+  queue_time_min: number | null;
+  action_time_min: number | null;
 };
 
 type Link = { id: string; from_id: string; to_id: string; kind: string };
@@ -31,6 +35,7 @@ const nodeTypes = {
   decision: StickyNode,
   data: StickyNode,
   opportunity: StickyNode,
+  gateway: GatewayNode,
 };
 
 const edgeTypes = {
@@ -58,16 +63,17 @@ function ProjectCanvasInner() {
   const flowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
 
-  const colorForKind = (k: 'decision'|'data'|'opportunity') => {
-    if (k === 'data') return { bg: '#E7F3EA', textColor:'#1F7A1F' }; // green sticky
-    if (k === 'opportunity') return { bg: '#CDE3FF', textColor:'#1f2937' }; // blue sticky
-    return { bg: '#fff7b3', textColor:'#1f2937' }; // yellow
+  const colorForKind = (k: K) => {
+    if (k === 'data') return { bg: '#E7F3EA', textColor:'#1F7A1F' };
+    if (k === 'opportunity') return { bg: '#CDE3FF', textColor:'#1f2937' };
+    if (k === 'decision') return { bg: '#fff7b3', textColor:'#1f2937' };
+    return { bg: '#F6E7B2', textColor:'#1f2937' };
   };
 
   const load = useCallback(async () => {
     const { data: decisions } = await supabase
       .from('decisions')
-      .select('id, project_id, kind, title, statement, x, y, estimated_duration_min')
+      .select('id, project_id, kind, title, statement, x, y, queue_time_min, action_time_min')
       .eq('project_id', projectId)
       .order('created_at', { ascending: true });
 
@@ -83,6 +89,7 @@ function ProjectCanvasInner() {
     setNodes(ds.map((d) => ({
       id: d.id,
       type: d.kind || 'decision',
+      draggable: true,
       position: { x: Number(d.x) || 100, y: Number(d.y) || 100 },
       data: { label: d.title || 'Note', onRename, ...colorForKind(d.kind || 'decision') }
     })));
@@ -104,7 +111,7 @@ function ProjectCanvasInner() {
     event.dataTransfer.dropEffect = 'move';
   }, []);
 
-  function addNodeAt(pos: {x:number;y:number}, kind: 'decision'|'data'|'opportunity', title?: string) {
+  function addNodeAt(pos: {x:number;y:number}, kind: K, title?: string) {
     supabase.from('decisions').insert({
       project_id: projectId, kind, title: title || (kind==='data'?'Data':'New item'), x: pos.x, y: pos.y
     }).select('*').single().then(({ data }) => {
@@ -112,19 +119,22 @@ function ProjectCanvasInner() {
         const d = data as any;
         setDecisions(prev => [...prev, d]);
         setNodes(prev => [...prev, {
-          id: d.id, type: d.kind, position: {x:d.x||0,y:d.y||0},
+          id: d.id, type: d.kind, draggable: true,
+          position: {x:d.x||0,y:d.y||0},
           data: { label: d.title, onRename, ...colorForKind(d.kind) }
         }]);
       }
     });
   }
 
+  const NODE_SIZE = 120;
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
-    const type = event.dataTransfer.getData('application/reactflow') as 'decision'|'data'|'opportunity';
+    const type = event.dataTransfer.getData('application/reactflow') as K;
     if (!type || !flowWrapper.current) return;
     const bounds = flowWrapper.current.getBoundingClientRect();
-    const position = screenToFlowPosition({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
+    const p = screenToFlowPosition({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
+    const position = { x: p.x - NODE_SIZE, y: p.y - NODE_SIZE };
     addNodeAt(position, type);
   }, [screenToFlowPosition]);
 
@@ -171,8 +181,8 @@ function ProjectCanvasInner() {
   const onConnectEnd = useCallback((event: any) => {
     const targetIsPane = (event.target as HTMLElement)?.classList?.contains('react-flow__pane');
     if (!targetIsPane) return;
-    const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-    addNodeAt(position, 'decision', 'New decision');
+    const { x, y } = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    addNodeAt({ x: x - NODE_SIZE/2, y: y - NODE_SIZE/2 }, 'decision', 'New decision');
   }, [screenToFlowPosition]);
 
   function selectNode(nodeId: string) {
@@ -209,10 +219,17 @@ function ProjectCanvasInner() {
     return edges;
   }, [edges, view]);
 
-  const totalMinutes = useMemo(
-    () => decisions.reduce((acc, d) => acc + (d.estimated_duration_min || 0), 0),
-    [decisions]
-  );
+  const sums = useMemo(() => {
+    const visible = decisions.filter(d => {
+      if (view === 'information') return d.kind === 'data';
+      if (view === 'opportunities') return d.kind === 'opportunity';
+      return true;
+    });
+    const q = visible.reduce((a, d) => a + (d.queue_time_min || 0), 0);
+    const a = visible.reduce((a2, d) => a2 + (d.action_time_min || 0), 0);
+    const t = q + a;
+    return { q, a, t };
+  }, [decisions, view]);
 
   return (
     <div className="relative m-4 rounded-2xl border" style={{ backgroundColor: '#F5F3EA', overflow: 'hidden' }}>
@@ -232,7 +249,10 @@ function ProjectCanvasInner() {
           onDrop={onDrop}
           onDragOver={onDragOver}
           fitView
+          panOnDrag={false}
           nodesDraggable
+          nodesConnectable
+          selectionOnDrag
           snapToGrid
           snapGrid={[24,24]}
         >
@@ -242,10 +262,10 @@ function ProjectCanvasInner() {
         </ReactFlow>
       </div>
 
-      <div className="absolute bottom-2 left-2 text-xs bg-white/80 rounded px-2 py-1 shadow">
-        {view === 'process' && <>Process time (sum visible): {totalMinutes} min</>}
-        {view === 'information' && <>Information nodes: {decisions.filter(d=>d.kind==='data').length}</>}
-        {view === 'opportunities' && <>Opportunities: {decisions.filter(d=>d.kind==='opportunity').length}</>}
+      <div className="absolute left-2 bottom-16 text-xs bg-white/90 rounded px-2 py-1 shadow">
+        <div>Queue: {sums.q} min</div>
+        <div>Action: {sums.a} min</div>
+        <div>Total: {sums.t} min</div>
       </div>
 
       <SipocInspector

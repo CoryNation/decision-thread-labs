@@ -13,7 +13,7 @@ export default function CanvasToolbar({ view, setView }: Props) {
   }
 
   return (
-    <div className="absolute top-4 left-4 z-50">
+    <div className="absolute top-4 left-4 z-50 pointer-events-auto">
       <div className="card p-3 flex flex-col gap-3 min-w-[180px]">
         <h3 className="font-semibold">Tools</h3>
 
@@ -35,6 +35,8 @@ export default function CanvasToolbar({ view, setView }: Props) {
                className="px-2 py-1 rounded-md border bg-green-100 cursor-grab">Data / Information</div>
           <div draggable onDragStart={(e)=>onDragStart(e,'opportunity')}
                className="px-2 py-1 rounded-md border bg-blue-100 cursor-grab">Opportunity</div>
+          <div draggable onDragStart={(e)=>onDragStart(e,'gateway')}
+               className="px-2 py-1 rounded-md border bg-amber-100 cursor-grab">Gateway (Decision)</div>
         </div>
       </div>
     </div>

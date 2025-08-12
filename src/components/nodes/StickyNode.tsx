@@ -5,8 +5,8 @@ import { useState } from 'react';
 type Props = any;
 
 export default function StickyNode({ id, data, selected }: Props) {
-  const size = 120; // 5 dots by 5 dots (24px grid)
-  const bg = data.bg || '#fff7b3'; // default sticky yellow
+  const size = 120;
+  const bg = data.bg || '#fff7b3';
   const textColor = data.textColor || '#1f2937';
 
   const [editing, setEditing] = useState(false);
@@ -28,17 +28,15 @@ export default function StickyNode({ id, data, selected }: Props) {
 
   return (
     <div
-      style={{ width: size, height: size, pointerEvents: 'all', cursor: 'grab' }}
-      className={`relative rounded-md border shadow ${selected ? 'shadow-xl' : 'shadow-soft'} bg-white`}
+      style={{ width: size, height: size, cursor: editing ? 'text' : 'grab' }}
+      className={`relative rounded-md border ${selected ? 'shadow-2xl ring-2 ring-[#20B2AA]' : 'shadow-soft'} bg-white`}
       onDoubleClick={startEdit}
     >
-      {/* Sticky face */}
       <div className="w-full h-full rounded-md relative" style={{ background: bg }}>
-        {/* Peel corner */}
-        <div className="absolute bottom-0 right-0 w-0 h-0 border-l-[18px] border-t-[18px] border-l-transparent"
-             style={{ borderTopColor: 'rgba(0,0,0,0.08)' }}/>
-
-        {/* Title */}
+        <div
+          className="absolute bottom-0 right-0 w-0 h-0"
+          style={{ borderTop: '18px solid rgba(0,0,0,0.10)', borderLeft: '18px solid transparent' }}
+        />
         {!editing && (
           <div className="px-3 py-2 text-sm font-medium select-none" style={{ color: textColor }}>
             {data.label || 'Note'}
@@ -47,7 +45,7 @@ export default function StickyNode({ id, data, selected }: Props) {
         {editing && (
           <input
             id={`title-edit-${id}`}
-            className="absolute left-2 right-2 top-2 border rounded px-2 py-1 text-sm"
+            className="absolute left-2 right-2 top-2 border rounded px-2 py-1 text-sm bg-white/80"
             value={value}
             onChange={e=>setValue(e.target.value)}
             onBlur={commit}
@@ -56,7 +54,6 @@ export default function StickyNode({ id, data, selected }: Props) {
         )}
       </div>
 
-      {/* Centered side handles */}
       <Handle type="source" position={Position.Top}    id="top"    style={{ left: '50%', transform:'translateX(-50%)' }} />
       <Handle type="source" position={Position.Right}  id="right"  style={{ top: '50%', transform:'translateY(-50%)' }} />
       <Handle type="source" position={Position.Bottom} id="bottom" style={{ left: '50%', transform:'translateX(-50%)' }} />
