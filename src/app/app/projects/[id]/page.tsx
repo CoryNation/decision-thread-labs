@@ -10,9 +10,7 @@ import 'reactflow/dist/style.css';
 import { supabase } from '@/lib/supabaseClient';
 import CanvasToolbar from '@/components/CanvasToolbar';
 import SipocInspector from '@/components/SipocInspector';
-import DecisionSticky from '@/components/nodes/DecisionSticky';
-import DataCylinder from '@/components/nodes/DataCylinder';
-import OpportunitySticky from '@/components/nodes/OpportunitySticky';
+import StickyNode from '@/components/nodes/StickyNode';
 import ProcessEdge from '@/components/edges/ProcessEdge';
 import DataEdge from '@/components/edges/DataEdge';
 
@@ -30,9 +28,9 @@ type Decision = {
 type Link = { id: string; from_id: string; to_id: string; kind: string };
 
 const nodeTypes = {
-  decision: DecisionSticky,
-  data: DataCylinder,
-  opportunity: OpportunitySticky,
+  decision: StickyNode,
+  data: StickyNode,
+  opportunity: StickyNode,
 };
 
 const edgeTypes = {
@@ -40,7 +38,6 @@ const edgeTypes = {
   data: DataEdge,
 };
 
-// Outer wrapper so ReactFlowProvider is above any hook usage
 export default function ProjectCanvasPage() {
   return (
     <ReactFlowProvider>
@@ -60,6 +57,12 @@ function ProjectCanvasInner() {
   const [selected, setSelected] = useState<any | null>(null);
   const flowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
+
+  const colorForKind = (k: 'decision'|'data'|'opportunity') => {
+    if (k === 'data') return { bg: '#E7F3EA', textColor:'#1F7A1F' }; // green sticky
+    if (k === 'opportunity') return { bg: '#CDE3FF', textColor:'#1f2937' }; // blue sticky
+    return { bg: '#fff7b3', textColor:'#1f2937' }; // yellow
+  };
 
   const load = useCallback(async () => {
     const { data: decisions } = await supabase
@@ -81,7 +84,7 @@ function ProjectCanvasInner() {
       id: d.id,
       type: d.kind || 'decision',
       position: { x: Number(d.x) || 100, y: Number(d.y) || 100 },
-      data: { label: d.title || 'Decision' }
+      data: { label: d.title || 'Note', onRename, ...colorForKind(d.kind || 'decision') }
     })));
 
     setEdges(ls.map((l) => ({
@@ -108,7 +111,10 @@ function ProjectCanvasInner() {
       if (data) {
         const d = data as any;
         setDecisions(prev => [...prev, d]);
-        setNodes(prev => [...prev, { id: d.id, type: d.kind, position: {x:d.x||0,y:d.y||0}, data: { label: d.title } }]);
+        setNodes(prev => [...prev, {
+          id: d.id, type: d.kind, position: {x:d.x||0,y:d.y||0},
+          data: { label: d.title, onRename, ...colorForKind(d.kind) }
+        }]);
       }
     });
   }
@@ -174,9 +180,15 @@ function ProjectCanvasInner() {
     setSelected(d);
   }
 
+  async function onRename(id: string, title: string) {
+    await supabase.from('decisions').update({ title }).eq('id', id);
+    setNodes(prev => prev.map(n => n.id === id ? { ...n, data: { ...n.data, label: title } } : n));
+    setDecisions(prev => prev.map(d => d.id===id ? { ...d, title } : d));
+  }
+
   function onSaved(updated: any) {
     setDecisions(prev => prev.map(d => d.id === updated.id ? updated : d));
-    setNodes(prev => prev.map(n => n.id === updated.id ? { ...n, type: updated.kind, data: { label: updated.title || 'Decision' } } : n));
+    setNodes(prev => prev.map(n => n.id === updated.id ? { ...n, type: updated.kind, data: { ...n.data, label: updated.title } } : n));
   }
 
   function onDelete(id: string) {
@@ -203,9 +215,9 @@ function ProjectCanvasInner() {
   );
 
   return (
-    <div className="relative m-4 rounded-2xl border" style={{ backgroundColor: '#F5F3EA' }}>
-      <CanvasToolbar onAddDecision={() => addNodeAt({x:160,y:120}, 'decision')} view={view} setView={setView} />
-      <div ref={flowWrapper} style={{ height: '80vh' }}>
+    <div className="relative m-4 rounded-2xl border" style={{ backgroundColor: '#F5F3EA', overflow: 'hidden' }}>
+      <CanvasToolbar view={view} setView={setView} />
+      <div ref={flowWrapper} style={{ height: '80vh', overflow: 'hidden' }}>
         <ReactFlow
           nodes={filteredNodes}
           edges={filteredEdges}
@@ -220,6 +232,7 @@ function ProjectCanvasInner() {
           onDrop={onDrop}
           onDragOver={onDragOver}
           fitView
+          nodesDraggable
           snapToGrid
           snapGrid={[24,24]}
         >

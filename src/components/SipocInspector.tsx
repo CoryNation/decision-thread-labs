@@ -35,16 +35,21 @@ type Props = {
   onDelete?: (id: string) => void;
 };
 
+const DEFAULTS = ['Email','Verbal','Form','Notification','Other'];
+
 export default function SipocInspector({ decision, onClose, onSaved, onDelete }: Props) {
   const [form, setForm] = useState<Decision | null>(decision);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [commOptions, setCommOptions] = useState<string[]>([]);
   const [otherEntry, setOtherEntry] = useState('');
+  const [editingLabel, setEditingLabel] = useState<string | null>(null);
+  const [newLabel, setNewLabel] = useState('');
 
+  // Initialize form only when the selection changes
   useEffect(() => {
-    if (!decision) return;
-    setForm(prev => (prev && prev.id === decision.id) ? prev : decision);
+    if (!decision) { setForm(null); return; }
+    setForm({ ...decision });
   }, [decision?.id]);
 
   useEffect(() => {
@@ -52,9 +57,7 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
       if (!decision) return;
       const { data } = await supabase.from('project_comm_options').select('label').eq('project_id', decision.project_id).order('label');
       const labels = (data || []).map((r: any) => r.label);
-      const defaults = ['Email','Verbal','Form','Notification','Other'];
-      const set = Array.from(new Set([...defaults, ...labels]));
-      setCommOptions(set);
+      setCommOptions(Array.from(new Set([...DEFAULTS, ...labels])));
     }
     load();
   }, [decision?.project_id]);
@@ -78,6 +81,31 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
     if (!error) {
       setCommOptions(prev => Array.from(new Set([...prev, label])));
       setOtherEntry('');
+    } else {
+      setStatus(error.message);
+    }
+  }
+
+  async function renameOption(oldLabel: string, newLabelVal: string) {
+    if (!decision) return;
+    const { error } = await supabase.rpc('rename_comm_option', { p_project_id: decision.project_id, p_old_label: oldLabel, p_new_label: newLabelVal });
+    if (!error) {
+      setCommOptions(prev => prev.map(l => l === oldLabel ? newLabelVal : l));
+      setEditingLabel(null);
+      setNewLabel('');
+      // also update current form if it had old label
+      setForm(prev => prev ? { ...prev, comm_methods: (prev.comm_methods || []).map(l => l===oldLabel?newLabelVal:l) } : prev);
+    } else {
+      setStatus(error.message);
+    }
+  }
+
+  async function deleteOption(label: string) {
+    if (!decision) return;
+    const { error } = await supabase.rpc('delete_comm_option', { p_project_id: decision.project_id, p_label: label });
+    if (!error) {
+      setCommOptions(prev => prev.filter(l => l !== label));
+      setForm(prev => prev ? { ...prev, comm_methods: (prev.comm_methods || []).filter(l => l !== label) } : prev);
     } else {
       setStatus(error.message);
     }
@@ -138,8 +166,13 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
   );
 
   return (
-    <div className="absolute right-0 top-0 bottom-0 w-full sm:w-[440px] z-50 bg-white border-l shadow-soft overflow-y-auto">
-      <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white">
+    <div
+      className="absolute right-0 top-0 h-[80vh] w-full sm:w-[320px] z-50 bg-white border-l shadow-soft"
+      style={{ overflow: 'hidden' }}
+      onMouseDown={(e)=>e.stopPropagation()}
+      onWheel={(e)=>e.stopPropagation()}
+    >
+      <div className="p-3 border-b flex items-center justify-between sticky top-0 bg-white z-10">
         <h2 className="font-semibold">SIPOC Inspector</h2>
         <div className="flex gap-2">
           <button onClick={save} className="btn btn-accent">{saving ? 'Saving…' : 'Save'}</button>
@@ -147,7 +180,7 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
         </div>
       </div>
 
-      <div className="p-4 space-y-4">
+      <div className="p-4 space-y-4 overflow-y-auto h-[calc(80vh-52px)]">
         <Field label="Type">
           <select className="border rounded-xl px-3 py-2" value={form.kind}
             onChange={e=>update('kind', e.target.value as any)}>
@@ -159,7 +192,7 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
 
         <Field label="Title">
           <input className="w-full border rounded-xl px-3 py-2"
-            value={form.title} onChange={e=>update('title', e.target.value)} />
+            value={form.title || ''} onChange={e=>update('title', e.target.value)} />
         </Field>
 
         <Field label="Decision Statement">
@@ -188,9 +221,22 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
                         onChange={()=>toggleCommMethod(opt)}
                       />
                       <span>{opt}</span>
+                      {(!DEFAULTS.includes(opt)) && (
+                        <>
+                          <button className="text-xs underline ml-1" onClick={(e)=>{e.preventDefault(); setEditingLabel(opt); setNewLabel(opt);}}>edit</button>
+                          <button className="text-xs text-red-600 underline" onClick={(e)=>{e.preventDefault(); deleteOption(opt);}}>x</button>
+                        </>
+                      )}
                     </label>
                   ))}
                 </div>
+                {editingLabel && (
+                  <div className="flex gap-2">
+                    <input className="flex-1 border rounded-xl px-3 py-2 text-sm" value={newLabel} onChange={e=>setNewLabel(e.target.value)} />
+                    <button className="btn" onClick={()=>renameOption(editingLabel!, newLabel)}>Save</button>
+                    <button className="btn" onClick={()=>{setEditingLabel(null); setNewLabel('');}}>Cancel</button>
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <input
                     placeholder="other"
@@ -198,17 +244,7 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
                     value={otherEntry}
                     onChange={e=>setOtherEntry(e.target.value)}
                   />
-                  <button type="button" className="btn" onClick={async () => {
-                    const label = otherEntry.trim();
-                    if (!label || !decision) return;
-                    const { error } = await supabase.from('project_comm_options').insert({ project_id: decision.project_id, label });
-                    if (!error) {
-                      setCommOptions(prev => Array.from(new Set([...prev, label])));
-                      setOtherEntry('');
-                    } else {
-                      setStatus(error.message);
-                    }
-                  }}>Add</button>
+                  <button type="button" className="btn" onClick={addOtherOption}>Add</button>
                 </div>
               </div>
             </Field>
