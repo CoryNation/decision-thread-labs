@@ -1,3 +1,4 @@
+
 'use client';
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
@@ -30,7 +31,7 @@ type Decision = {
 };
 
 type Props = {
-  decision: Decision | null;
+  decision: any; // relaxed to avoid cross-file type mismatch
   onClose: () => void;
   onSaved?: (d: Decision) => void;
   onDelete?: (id: string) => void;
@@ -49,19 +50,20 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
 
   useEffect(() => {
     if (!decision) { setForm(null); return; }
-    setForm({ ...decision });
+    setForm({ ...(decision as Decision) });
   }, [decision?.id]);
 
   useEffect(() => {
     async function load() {
       if (!decision) return;
-      const { data } = await supabase.from('project_comm_options').select('label').eq('project_id', decision.project_id).order('label');
+      const { data } = await supabase.from('project_comm_options').select('label').eq('project_id', (decision as Decision).project_id).order('label');
       const labels = (data || []).map((r: any) => r.label);
       setCommOptions(Array.from(new Set([...DEFAULTS, ...labels])));
     }
     load();
   }, [decision?.project_id]);
 
+  // Lock page scroll while open
   useEffect(() => {
     if (!form) return;
     const prevBody = document.body.style.overflow;
@@ -90,14 +92,14 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
   async function addOtherOption() {
     const label = otherEntry.trim();
     if (!label || !decision) return;
-    const { error } = await supabase.from('project_comm_options').insert({ project_id: decision.project_id, label });
+    const { error } = await supabase.from('project_comm_options').insert({ project_id: (decision as Decision).project_id, label });
     if (!error) { setCommOptions(prev => Array.from(new Set([...prev, label]))); setOtherEntry(''); }
     else { setStatus(error.message); }
   }
 
   async function renameOption(oldLabel: string, newLabelVal: string) {
     if (!decision) return;
-    const { error } = await supabase.rpc('rename_comm_option', { p_project_id: decision.project_id, p_old_label: oldLabel, p_new_label: newLabelVal });
+    const { error } = await supabase.rpc('rename_comm_option', { p_project_id: (decision as Decision).project_id, p_old_label: oldLabel, p_new_label: newLabelVal });
     if (!error) {
       setCommOptions(prev => prev.map(l => l === oldLabel ? newLabelVal : l));
       setEditingLabel(null); setNewLabel('');
@@ -107,7 +109,7 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
 
   async function deleteOption(label: string) {
     if (!decision) return;
-    const { error } = await supabase.rpc('delete_comm_option', { p_project_id: decision.project_id, p_label: label });
+    const { error } = await supabase.rpc('delete_comm_option', { p_project_id: (decision as Decision).project_id, p_label: label });
     if (!error) {
       setCommOptions(prev => prev.filter(l => l !== label));
       setForm(prev => prev ? { ...prev, comm_methods: (prev.comm_methods || []).filter(l => l !== label) } : prev);
@@ -181,38 +183,44 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
       </div>
 
       <div className="p-4 space-y-4 overflow-y-auto h-[calc(80vh-52px)]">
-        <Field label="Type">
-          <select className="border rounded-xl px-3 py-2" value={form.kind}
+        <label className="block text-sm">
+          <span className="text-dtl-charcoal">Type</span>
+          <select className="border rounded-xl px-3 py-2 w-full" value={form.kind}
             onChange={e=>update('kind', e.target.value as any)}>
             <option value="decision">Decision</option>
             <option value="data">Data/Information</option>
             <option value="opportunity">Opportunity</option>
             <option value="gateway">Gateway (Decision)</option>
           </select>
-        </Field>
+        </label>
 
-        <Field label="Title">
+        <label className="block text-sm">
+          <span className="text-dtl-charcoal">Title</span>
           <input className="w-full border rounded-xl px-3 py-2"
             value={form.title || ''} onChange={e=>update('title', e.target.value)} />
-        </Field>
+        </label>
 
-        <Field label="Decision Statement">
+        <label className="block text-sm">
+          <span className="text-dtl-charcoal">Decision Statement</span>
           <textarea className="w-full border rounded-xl px-3 py-2"
             value={form.statement ?? ''} onChange={e=>update('statement', e.target.value)} />
-        </Field>
+        </label>
 
         <div className="mt-2">
           <h3 className="font-semibold mb-2">Supplier</h3>
           <div className="grid grid-cols-1 gap-2">
-            <Field label="Who supplies the information?">
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">Who supplies the information?</span>
               <input className="w-full border rounded-xl px-3 py-2"
                 value={form.supplier_who ?? ''} onChange={e=>update('supplier_who', e.target.value)} />
-            </Field>
-            <Field label="Where is the information stored?">
+            </label>
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">Where is the information stored?</span>
               <input className="w-full border rounded-xl px-3 py-2"
                 value={form.supplier_storage ?? ''} onChange={e=>update('supplier_storage', e.target.value)} />
-            </Field>
-            <Field label="How is it communicated?">
+            </label>
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">How is it communicated?</span>
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-2">
                   {(commOptions || []).map(opt => (
@@ -248,102 +256,116 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
                   <button type="button" className="btn" onClick={addOtherOption}>Add</button>
                 </div>
               </div>
-            </Field>
+            </label>
           </div>
         </div>
 
         <div className="mt-2">
           <h3 className="font-semibold mb-2">Inputs</h3>
           <div className="grid grid-cols-1 gap-2">
-            <Field label="What information is needed?">
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">What information is needed?</span>
               <input className="w-full border rounded-xl px-3 py-2"
                 value={form.input_what ?? ''} onChange={e=>update('input_what', e.target.value)} />
-            </Field>
-            <Field label="What format is it in?">
+            </label>
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">What format is it in?</span>
               <input className="w-full border rounded-xl px-3 py-2"
                 value={form.inputs_format ?? ''} onChange={e=>update('inputs_format', e.target.value)} />
-            </Field>
-            <Field label="Is the information transformed into another format?">
+            </label>
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">Is the information transformed into another format?</span>
               <select className="border rounded-xl px-3 py-2"
                 value={form.inputs_transformed ? 'yes':'no'}
                 onChange={e=>update('inputs_transformed', e.target.value === 'yes')}>
                 <option value="no">No</option>
                 <option value="yes">Yes</option>
               </select>
-            </Field>
+            </label>
           </div>
         </div>
 
         <div className="mt-2">
           <h3 className="font-semibold mb-2">Process of Decision Making</h3>
           <div className="grid grid-cols-1 gap-2">
-            <Field label="Describe high level decision making process for this step.">
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">Describe high level decision making process for this step.</span>
               <textarea className="w-full border rounded-xl px-3 py-2"
                 value={form.process_to_information ?? ''} onChange={e=>update('process_to_information', e.target.value)} />
-            </Field>
-            <Field label="What is the goal?">
+            </label>
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">What is the goal?</span>
               <input className="w-full border rounded-xl px-3 py-2"
                 value={form.process_goal ?? ''} onChange={e=>update('process_goal', e.target.value)} />
-            </Field>
-            <Field label="Are other people needed to support?">
+            </label>
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">Are other people needed to support?</span>
               <select className="border rounded-xl px-3 py-2"
                 value={form.process_support_needed ? 'yes':'no'}
                 onChange={e=>update('process_support_needed', e.target.value === 'yes')}>
                 <option value="no">No</option>
                 <option value="yes">Yes</option>
               </select>
-            </Field>
+            </label>
           </div>
         </div>
 
         <div className="mt-2">
           <h3 className="font-semibold mb-2">Outputs</h3>
           <div className="grid grid-cols-1 gap-2">
-            <Field label="What is the output?">
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">What is the output?</span>
               <input className="w-full border rounded-xl px-3 py-2"
                 value={form.output_what ?? ''} onChange={e=>update('output_what', e.target.value)} />
-            </Field>
-            <Field label="What format is it in?">
+            </label>
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">What format is it in?</span>
               <input className="w-full border rounded-xl px-3 py-2"
                 value={form.outputs_format ?? ''} onChange={e=>update('outputs_format', e.target.value)} />
-            </Field>
+            </label>
           </div>
         </div>
 
         <div className="mt-2">
           <h3 className="font-semibold mb-2">Customer / Handoff</h3>
           <div className="grid grid-cols-1 gap-2">
-            <Field label="Who is the customer (next owner)?">
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">Who is the customer (next owner)?</span>
               <input className="w-full border rounded-xl px-3 py-2"
                 value={form.customer_who ?? ''} onChange={e=>update('customer_who', e.target.value)} />
-            </Field>
-            <Field label="How is it communicated?">
+            </label>
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">How is it communicated?</span>
               <input className="w-full border rounded-xl px-3 py-2"
                 value={form.output_comm ?? ''} onChange={e=>update('output_comm', e.target.value)} />
-            </Field>
-            <Field label="Handoff notes">
+            </label>
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">Handoff notes</span>
               <textarea className="w-full border rounded-xl px-3 py-2"
                 value={form.handoff_notes ?? ''} onChange={e=>update('handoff_notes', e.target.value)} />
-            </Field>
+            </label>
           </div>
         </div>
 
         <div className="mt-2">
           <h3 className="font-semibold mb-2">Timing</h3>
           <div className="grid grid-cols-1 gap-2">
-            <Field label="Queue time (min)">
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">Queue time (min)</span>
               <input type="number" className="w-full border rounded-xl px-3 py-2"
                 value={form.queue_time_min ?? 0}
                 onChange={e=>update('queue_time_min', Number(e.target.value))} />
-            </Field>
-            <Field label="Action time (min)">
+            </label>
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">Action time (min)</span>
               <input type="number" className="w-full border rounded-xl px-3 py-2"
                 value={form.action_time_min ?? 0}
                 onChange={e=>update('action_time_min', Number(e.target.value))} />
-            </Field>
-            <Field label="Total (calculated)">
+            </label>
+            <label className="block text-sm">
+              <span className="text-dtl-charcoal">Total (calculated)</span>
               <input className="w-full border rounded-xl px-3 py-2 bg-gray-50" value={(form.queue_time_min||0)+(form.action_time_min||0)} readOnly />
-            </Field>
+            </label>
           </div>
         </div>
 
