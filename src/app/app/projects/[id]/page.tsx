@@ -1,3 +1,4 @@
+
 'use client';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -58,8 +59,9 @@ function ProjectCanvasInner() {
   const [view, setView] = useState<'process'|'information'|'opportunities'>('process');
 
   const [decisions, setDecisions] = useState<Decision[]>([]);
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  // IMPORTANT: provide node DATA generic (or none), not the Node type
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selected, setSelected] = useState<Decision | null>(null);
   const flowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
