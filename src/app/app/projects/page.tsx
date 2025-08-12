@@ -3,62 +3,79 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
-type Project = { id: string; name: string; description: string | null }
+type Project = { id: string; name: string; description: string | null };
 
-export default function Projects() {
+export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState<string | null>(null);
-  const [signedIn, setSignedIn] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
-    const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSignedIn(!!session);
-      if (!session) {
-        setMessage('Please sign in to view your projects.');
-        setLoading(false);
-        return;
-      }
-      const { data, error } = await supabase.from('projects').select('*').limit(20);
-      if (error) {
-        setMessage('No access yet. If this is your first time, create an org and membership in Supabase.');
-      } else {
-        setProjects(data as Project[]);
-      }
-      setLoading(false);
-    };
-    load();
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSignedIn(!!session);
-    });
-    return () => sub.subscription.unsubscribe();
-  }, []);
+  useEffect(() => { load(); }, []);
+
+  async function load() {
+    const user = (await supabase.auth.getUser()).data.user;
+    if (!user) return;
+    const { data } = await supabase.from('projects').select('id, name, description').order('created_at', { ascending: false });
+    setProjects((data || []) as any);
+  }
+
+  function startEdit(p: Project) {
+    setEditing(p.id);
+    setEditName(p.name);
+    setEditDesc(p.description || '');
+  }
+
+  async function saveEdit(id: string) {
+    const { error } = await supabase.from('projects')
+      .update({ name: editName.trim(), description: editDesc.trim() })
+      .eq('id', id);
+    if (error) { setErr(error.message); return; }
+    setEditing(null);
+    await load();
+  }
+
+  async function del(id: string) {
+    if (!confirm('Delete this project? This cannot be undone.')) return;
+    const { error } = await supabase.from('projects').delete().eq('id', id);
+    if (error) { setErr(error.message); return; }
+    await load();
+  }
 
   return (
-    <section className="max-w-6xl mx-auto px-4 py-10">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Projects</h1>
-        <Link href="/app/projects/new" className="btn btn-primary">New Project</Link>
+    <section className="container py-8">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold">Projects</h1>
+        <Link className="btn btn-accent" href="/app/projects/new">New Project</Link>
       </div>
-      {loading && <div className="mt-6">Loading…</div>}
-      {!loading && message && (
-        <div className="mt-6 card p-4">
-          <p className="text-dtl-charcoal">{message}</p>
-          {!signedIn && <div className="mt-3"><Link className="text-dtl-teal underline" href="/auth">Go to Sign in</Link></div>}
-        </div>
-      )}
-      <ul className="mt-6 grid md:grid-cols-2 gap-4">
+      {err && <div className="mb-3 text-sm text-red-600">{err}</div>}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {projects.map(p => (
-          <li key={p.id} className="card p-4">
-            <h3 className="font-semibold">{p.name}</h3>
-            <p className="text-sm text-dtl-charcoal">{p.description}</p>
-            <div className="mt-3">
-              <Link className="text-dtl-teal underline" href={`/app/projects/${p.id}`}>Open</Link>
-            </div>
-          </li>
+          <div key={p.id} className="card p-3 flex flex-col gap-3">
+            {editing === p.id ? (
+              <>
+                <input className="border rounded-xl px-3 py-2" value={editName} onChange={e=>setEditName(e.target.value)} />
+                <textarea className="border rounded-xl px-3 py-2" value={editDesc} onChange={e=>setEditDesc(e.target.value)} />
+                <div className="flex gap-2">
+                  <button className="btn btn-accent" onClick={()=>saveEdit(p.id)}>Save</button>
+                  <button className="btn" onClick={()=>setEditing(null)}>Cancel</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-lg font-semibold">{p.name}</div>
+                <div className="text-sm text-dtl-charcoal">{p.description}</div>
+                <div className="flex gap-2 mt-2">
+                  <Link className="btn" href={`/app/projects/${p.id}`}>Open Canvas</Link>
+                  <button className="btn" onClick={()=>startEdit(p)}>Edit</button>
+                  <button className="btn text-red-600" onClick={()=>del(p.id)}>Delete</button>
+                </div>
+              </>
+            )}
+          </div>
         ))}
-      </ul>
+      </div>
     </section>
-  )
+  );
 }

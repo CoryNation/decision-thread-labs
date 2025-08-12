@@ -3,8 +3,9 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   Background, Controls, MiniMap, MarkerType,
-  addEdge, Connection, Edge, Node, OnConnect, OnEdgesDelete, OnNodesDelete,
-  ReactFlowProvider, useReactFlow
+  addEdge, Connection, Edge, Node, OnConnect,
+  ReactFlowProvider, useReactFlow,
+  useNodesState, useEdgesState
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { supabase } from '@/lib/supabaseClient';
@@ -57,9 +58,9 @@ function ProjectCanvasInner() {
   const [view, setView] = useState<'process'|'information'|'opportunities'>('process');
 
   const [decisions, setDecisions] = useState<Decision[]>([]);
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
-  const [selected, setSelected] = useState<any | null>(null);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [selected, setSelected] = useState<Decision | null>(null);
   const flowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
 
@@ -157,33 +158,11 @@ function ProjectCanvasInner() {
     }
   }, [projectId, decisions]);
 
-  const onNodesDelete: OnNodesDelete = useCallback(async (nds) => {
-    const ids = nds.map(n => n.id);
-    if (ids.length) {
-      await supabase.from('decisions').delete().in('id', ids);
-      setDecisions((prev) => prev.filter(d => !ids.includes(d.id)));
-    }
-  }, []);
-
-  const onEdgesDelete: OnEdgesDelete = useCallback(async (eds) => {
-    const ids = eds.map(e => e.id);
-    if (ids.length) {
-      await supabase.from('decision_links').delete().in('id', ids);
-    }
-  }, []);
-
   const onNodeDragStop = useCallback(async (_e: any, node: Node) => {
     await supabase.from('decisions')
       .update({ x: node.position.x, y: node.position.y })
       .eq('id', node.id);
   }, []);
-
-  const onConnectEnd = useCallback((event: any) => {
-    const targetIsPane = (event.target as HTMLElement)?.classList?.contains('react-flow__pane');
-    if (!targetIsPane) return;
-    const { x, y } = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-    addNodeAt({ x: x - NODE_SIZE/2, y: y - NODE_SIZE/2 }, 'decision', 'New decision');
-  }, [screenToFlowPosition]);
 
   function selectNode(nodeId: string) {
     const d = decisions.find(d => d.id === nodeId) || null;
@@ -240,18 +219,18 @@ function ProjectCanvasInner() {
           edges={filteredEdges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onConnectEnd={onConnectEnd}
-          onEdgesDelete={onEdgesDelete}
-          onNodesDelete={onNodesDelete}
+          onPaneClick={() => setSelected(null)}
           onNodeClick={(_e, n) => selectNode(n.id)}
           onNodeDragStop={onNodeDragStop}
           onDrop={onDrop}
           onDragOver={onDragOver}
           fitView
-          panOnDrag={false}
-          nodesDraggable
-          nodesConnectable
+          panOnDrag={true}
+          nodesDraggable={true}
+          nodesConnectable={true}
           selectionOnDrag
           snapToGrid
           snapGrid={[24,24]}

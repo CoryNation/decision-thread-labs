@@ -47,7 +47,10 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
   const [newLabel, setNewLabel] = useState('');
 
-  useEffect(() => { if (!decision) { setForm(null); return; } setForm({ ...decision }); }, [decision?.id]);
+  useEffect(() => {
+    if (!decision) { setForm(null); return; }
+    setForm({ ...decision });
+  }, [decision?.id]);
 
   useEffect(() => {
     async function load() {
@@ -61,13 +64,19 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
 
   useEffect(() => {
     if (!form) return;
-    const prev = document.body.style.overflow;
+    const prevBody = document.body.style.overflow;
+    const prevHtml = (document.documentElement as HTMLElement).style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
+    (document.documentElement as HTMLElement).style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevBody;
+      (document.documentElement as HTMLElement).style.overflow = prevHtml;
+    };
   }, [form?.id]);
 
   if (!form) return null;
 
+  const stopAll = (e: any) => { e.stopPropagation(); };
   const update = (k: keyof Decision, v: any) => setForm(prev => prev ? { ...prev, [k]: v } : prev);
   const toggleCommMethod = (label: string) => {
     setForm(prev => {
@@ -82,7 +91,8 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
     const label = otherEntry.trim();
     if (!label || !decision) return;
     const { error } = await supabase.from('project_comm_options').insert({ project_id: decision.project_id, label });
-    if (!error) { setCommOptions(prev => Array.from(new Set([...prev, label]))); setOtherEntry(''); } else { setStatus(error.message); }
+    if (!error) { setCommOptions(prev => Array.from(new Set([...prev, label]))); setOtherEntry(''); }
+    else { setStatus(error.message); }
   }
 
   async function renameOption(oldLabel: string, newLabelVal: string) {
@@ -148,7 +158,7 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
   }
 
   const Field = ({ label, children }: any) => (
-    <label className="block text-sm">
+    <label className="block text-sm" onPointerDownCapture={stopAll} onMouseDown={stopAll} onClick={stopAll}>
       <span className="text-dtl-charcoal">{label}</span>
       <div className="mt-1">{children}</div>
     </label>
@@ -158,10 +168,9 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
     <div
       className="absolute right-0 top-0 h-[80vh] w-full sm:w-[320px] z-50 bg-white border-l shadow-soft"
       style={{ overflow: 'hidden' }}
-      onMouseDown={(e)=>e.stopPropagation()}
-      onWheel={(e)=>e.stopPropagation()}
-      onKeyDownCapture={(e)=>e.stopPropagation()}
-      tabIndex={0}
+      onPointerDownCapture={stopAll}
+      onMouseDown={stopAll}
+      onWheel={stopAll}
     >
       <div className="p-3 border-b flex items-center justify-between sticky top-0 bg-white z-10">
         <h2 className="font-semibold">SIPOC Inspector</h2>
@@ -207,7 +216,7 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-2">
                   {(commOptions || []).map(opt => (
-                    <label key={opt} className="inline-flex items-center gap-1 text-xs border rounded-full px-2 py-1">
+                    <label key={opt} className="inline-flex items-center gap-1 text-xs border rounded-full px-2 py-1" onPointerDownCapture={stopAll} onMouseDown={stopAll}>
                       <input type="checkbox"
                         checked={(form.comm_methods || []).includes(opt)}
                         onChange={()=>toggleCommMethod(opt)}
@@ -223,11 +232,11 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
                   ))}
                 </div>
                 {editingLabel && (
-                    <div className="flex gap-2">
-                      <input className="flex-1 border rounded-xl px-3 py-2 text-sm" value={newLabel} onChange={e=>setNewLabel(e.target.value)} />
-                      <button className="btn" onClick={()=>renameOption(editingLabel!, newLabel)}>Save</button>
-                      <button className="btn" onClick={()=>{setEditingLabel(null); setNewLabel('');}}>Cancel</button>
-                    </div>
+                  <div className="flex gap-2">
+                    <input className="flex-1 border rounded-xl px-3 py-2 text-sm" value={newLabel} onChange={e=>setNewLabel(e.target.value)} />
+                    <button className="btn" onClick={()=>renameOption(editingLabel!, newLabel)}>Save</button>
+                    <button className="btn" onClick={()=>{setEditingLabel(null); setNewLabel('');}}>Cancel</button>
+                  </div>
                 )}
                 <div className="flex gap-2">
                   <input
