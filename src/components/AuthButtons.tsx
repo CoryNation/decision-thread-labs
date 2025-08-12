@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+
 export default function AuthButtons() {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<string | null>(null);
@@ -21,24 +23,35 @@ export default function AuthButtons() {
 
   async function signInWithGoogle() {
     setStatus('Redirecting to Google...');
-    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: SITE_URL ? `${SITE_URL}/auth/callback` : undefined }
+    });
     if (error) setStatus(error.message);
   }
 
   async function signInWithEmail(e: React.FormEvent) {
     e.preventDefault();
     setStatus('Sending magic link...');
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: SITE_URL ? `${SITE_URL}/auth/callback` : undefined }
+    });
     if (error) setStatus(error.message);
     else setStatus('Check your email for a login link.');
   }
 
-  async function signOut() { await supabase.auth.signOut(); setStatus(null); }
+  async function signOut() {
+    await supabase.auth.signOut();
+    setStatus(null);
+  }
 
   if (userEmail) {
     return (
       <div className="space-y-2">
-        <div className="text-sm text-dtl-charcoal">Signed in as <span className="font-medium">{userEmail}</span></div>
+        <div className="text-sm text-dtl-charcoal">
+          Signed in as <span className="font-medium">{userEmail}</span>
+        </div>
         <button onClick={signOut} className="btn btn-primary">Sign out</button>
       </div>
     );
@@ -49,8 +62,14 @@ export default function AuthButtons() {
       <button onClick={signInWithGoogle} className="btn btn-accent w-full">Continue with Google</button>
       <div className="text-center text-xs text-dtl-charcoal">or</div>
       <form onSubmit={signInWithEmail} className="space-y-2">
-        <input type="email" required placeholder="you@company.com" value={email}
-          onChange={(e)=>setEmail(e.target.value)} className="w-full border rounded-2xl px-3 py-2"/>
+        <input
+          type="email"
+          required
+          placeholder="you@company.com"
+          value={email}
+          onChange={(e)=>setEmail(e.target.value)}
+          className="w-full border rounded-2xl px-3 py-2"
+        />
         <button type="submit" className="btn btn-primary w-full">Email me a magic link</button>
       </form>
       {status && <div className="text-xs text-dtl-charcoal">{status}</div>}
