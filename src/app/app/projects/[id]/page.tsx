@@ -1,55 +1,60 @@
 'use client';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
-  Background, Controls, MiniMap,
-  addEdge, Connection, Edge, Node, OnConnect, OnEdgesDelete, OnNodesDelete
+  Background, Controls, MiniMap, MarkerType,
+  addEdge, Connection, Edge, Node, OnConnect, OnEdgesDelete, OnNodesDelete, useReactFlow
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { supabase } from '@/lib/supabaseClient';
 import CanvasToolbar from '@/components/CanvasToolbar';
 import SipocInspector from '@/components/SipocInspector';
+import DecisionSticky from '@/components/nodes/DecisionSticky';
+import DataCylinder from '@/components/nodes/DataCylinder';
+import OpportunitySticky from '@/components/nodes/OpportunitySticky';
+import ProcessEdge from '@/components/edges/ProcessEdge';
+import DataEdge from '@/components/edges/DataEdge';
 
 type Decision = {
   id: string;
   project_id: string;
+  kind: 'decision'|'data'|'opportunity';
   title: string;
   statement: string | null;
-  status: 'queued'|'in_progress'|'decided'|'blocked';
-  priority: number | null;
   x: number | null;
   y: number | null;
-  supplier_who: string | null;
-  supplier_storage: string | null;
-  supplier_comm: string | null;
-  input_what: string | null;
-  input_local_storage: string | null;
-  input_preprocess: string | null;
-  process_to_information: string | null;
-  decision_upon_info: string | null;
-  decision_comm: string | null;
-  output_what: string | null;
-  output_storage: string | null;
-  output_comm: string | null;
-  customer_who: string | null;
-  handoff_notes: string | null;
+  estimated_duration_min: number | null;
 };
 
 type Link = { id: string; from_id: string; to_id: string; kind: string };
 
+const nodeTypes = {
+  decision: DecisionSticky,
+  data: DataCylinder,
+  opportunity: OpportunitySticky,
+};
+
+const edgeTypes = {
+  process: ProcessEdge,
+  data: DataEdge,
+};
+
 export default function ProjectCanvas() {
   const params = useParams();
   const projectId = params.id as string;
+  const [view, setView] = useState<'process'|'information'|'opportunities'>('process');
 
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
-  const [selected, setSelected] = useState<Decision | null>(null);
+  const [selected, setSelected] = useState<any | null>(null);
+  const flowWrapper = useRef<HTMLDivElement>(null);
+  const { screenToFlowPosition } = useReactFlow();
 
   const load = useCallback(async () => {
     const { data: decisions } = await supabase
       .from('decisions')
-      .select('*')
+      .select('id, project_id, kind, title, statement, x, y, estimated_duration_min')
       .eq('project_id', projectId)
       .order('created_at', { ascending: true });
 
@@ -64,6 +69,7 @@ export default function ProjectCanvas() {
     setDecisions(ds);
     setNodes(ds.map((d) => ({
       id: d.id,
+      type: d.kind || 'decision',
       position: { x: Number(d.x) || 100, y: Number(d.y) || 100 },
       data: { label: d.title || 'Decision' }
     })));
@@ -72,25 +78,58 @@ export default function ProjectCanvas() {
       id: l.id,
       source: l.from_id,
       target: l.to_id,
-      label: l.kind
+      type: l.kind === 'data' ? 'data' : 'process',
+      data: { label: l.kind === 'data' ? 'data' : undefined },
+      markerEnd: { type: MarkerType.ArrowClosed }
     })));
   }, [projectId]);
 
   useEffect(() => { load(); }, [load]);
 
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  function addNodeAt(pos: {x:number;y:number}, kind: 'decision'|'data'|'opportunity', title?: string) {
+    supabase.from('decisions').insert({
+      project_id: projectId, kind, title: title || (kind==='data'?'Data':'New item'), x: pos.x, y: pos.y
+    }).select('*').single().then(({ data }) => {
+      if (data) {
+        const d = data as any;
+        setDecisions(prev => [...prev, d]);
+        setNodes(prev => [...prev, { id: d.id, type: d.kind, position: {x:d.x||0,y:d.y||0}, data: { label: d.title } }]);
+      }
+    });
+  }
+
+  const onDrop = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    const type = event.dataTransfer.getData('application/reactflow') as 'decision'|'data'|'opportunity';
+    if (!type || !flowWrapper.current) return;
+    const bounds = flowWrapper.current.getBoundingClientRect();
+    const position = screenToFlowPosition({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
+    addNodeAt(position, type);
+  }, [screenToFlowPosition]);
+
   const onConnect: OnConnect = useCallback(async (c: Connection) => {
     if (!c.source || !c.target) return;
-    const { data, error } = await supabase
+    const src = decisions.find(d => d.id === c.source);
+    const tgt = decisions.find(d => d.id === c.target);
+    const kind = (src?.kind === 'data' || tgt?.kind === 'data') ? 'data' : 'precedes';
+    const { data } = await supabase
       .from('decision_links').insert({
-        project_id: projectId,
-        from_id: c.source,
-        to_id: c.target,
-        kind: 'precedes'
+        project_id: projectId, from_id: c.source, to_id: c.target, kind
       }).select('*').single();
-    if (!error && data) {
-      setEdges((eds) => addEdge({ id: data.id, source: data.from_id, target: data.to_id, label: data.kind }, eds));
+    if (data) {
+      setEdges((eds) => addEdge({
+        id: data.id, source: data.from_id, target: data.to_id,
+        type: kind === 'data' ? 'data' : 'process',
+        data: { label: kind === 'data' ? 'data' : undefined },
+        markerEnd: { type: MarkerType.ArrowClosed }
+      }, eds));
     }
-  }, [projectId]);
+  }, [projectId, decisions]);
 
   const onNodesDelete: OnNodesDelete = useCallback(async (nds) => {
     const ids = nds.map(n => n.id);
@@ -113,35 +152,21 @@ export default function ProjectCanvas() {
       .eq('id', node.id);
   }, []);
 
-  function addDecision() {
-    const x = 120 + (decisions.length % 5) * 140;
-    const y = 120 + Math.floor(decisions.length / 5) * 120;
-    supabase.from('decisions').insert({
-      project_id: projectId,
-      title: 'New decision',
-      statement: '',
-      x, y
-    }).select('*').single().then(({ data, error }) => {
-      if (!error && data) {
-        const d = data as Decision;
-        setDecisions(prev => [...prev, d]);
-        setNodes(prev => [...prev, {
-          id: d.id,
-          position: { x: Number(d.x) || 100, y: Number(d.y) || 100 },
-          data: { label: d.title }
-        }]);
-      }
-    });
-  }
+  const onConnectEnd = useCallback((event: any) => {
+    const targetIsPane = (event.target as HTMLElement)?.classList?.contains('react-flow__pane');
+    if (!targetIsPane) return;
+    const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    addNodeAt(position, 'decision', 'New decision');
+  }, [screenToFlowPosition]);
 
   function selectNode(nodeId: string) {
     const d = decisions.find(d => d.id === nodeId) || null;
     setSelected(d);
   }
 
-  function onSaved(updated: Decision) {
+  function onSaved(updated: any) {
     setDecisions(prev => prev.map(d => d.id === updated.id ? updated : d));
-    setNodes(prev => prev.map(n => n.id === updated.id ? { ...n, data: { label: updated.title || 'Decision' } } : n));
+    setNodes(prev => prev.map(n => n.id === updated.id ? { ...n, type: updated.kind, data: { label: updated.title || 'Decision' } } : n));
   }
 
   function onDelete(id: string) {
@@ -150,23 +175,60 @@ export default function ProjectCanvas() {
     setDecisions(prev => prev.filter(d => d.id !== id));
   }
 
+  const filteredNodes = useMemo(() => {
+    if (view === 'information') return nodes.map(n => ({ ...n, hidden: n.type !== 'data' }));
+    if (view === 'opportunities') return nodes.map(n => ({ ...n, hidden: n.type !== 'opportunity' }));
+    return nodes;
+  }, [nodes, view]);
+
+  const filteredEdges = useMemo(() => {
+    if (view === 'information') return edges.map(e => ({ ...e, hidden: e.type !== 'data' }));
+    if (view === 'opportunities') return edges.map(e => ({ ...e, hidden: true }));
+    return edges;
+  }, [edges, view]);
+
+  const metrics = useMemo(() => {
+    const visible = decisions.filter(d => {
+      if (view === 'information') return d.kind === 'data';
+      if (view === 'opportunities') return d.kind === 'opportunity';
+      return true;
+    });
+    const total = visible.reduce((acc, d) => acc + (d.estimated_duration_min || 0), 0);
+    return { totalMinutes: total };
+  }, [decisions, view]);
+
   return (
-    <div className="relative h-[80vh] m-4 rounded-2xl border bg-white">
-      <CanvasToolbar onAddDecision={addDecision} />
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onConnect={onConnect}
-        onEdgesDelete={onEdgesDelete}
-        onNodesDelete={onNodesDelete}
-        onNodeClick={(_e, n) => selectNode(n.id)}
-        onNodeDragStop={onNodeDragStop}
-        fitView
-      >
-        <Background />
-        <MiniMap />
-        <Controls />
-      </ReactFlow>
+    <div className="relative m-4 rounded-2xl border" style={{ backgroundColor: '#F5F3EA' }}>
+      <CanvasToolbar onAddDecision={() => addNodeAt({x:160,y:120}, 'decision')} view={view} setView={setView} />
+      <div ref={flowWrapper} style={{ height: '80vh' }}>
+        <ReactFlow
+          nodes={filteredNodes}
+          edges={filteredEdges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onConnect={onConnect}
+          onConnectEnd={onConnectEnd}
+          onEdgesDelete={onEdgesDelete}
+          onNodesDelete={onNodesDelete}
+          onNodeClick={(_e, n) => selectNode(n.id)}
+          onNodeDragStop={onNodeDragStop}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          fitView
+          snapToGrid
+          snapGrid={[24,24]}
+        >
+          <Background gap={24} size={1} />
+          <MiniMap />
+          <Controls />
+        </ReactFlow>
+      </div>
+
+      <div className="absolute bottom-2 left-2 text-xs bg-white/80 rounded px-2 py-1 shadow">
+        {view === 'process' && <>Process time (sum visible): {metrics.totalMinutes} min</>}
+        {view === 'information' && <>Information nodes: {decisions.filter(d=>d.kind==='data').length}</>}
+        {view === 'opportunities' && <>Opportunities: {decisions.filter(d=>d.kind==='opportunity').length}</>}
+      </div>
 
       <SipocInspector
         decision={selected}

@@ -5,24 +5,27 @@ import { supabase } from '@/lib/supabaseClient';
 type Decision = {
   id: string;
   project_id: string;
+  kind: 'decision'|'data'|'opportunity';
   title: string;
   statement: string | null;
-  status: 'queued' | 'in_progress' | 'decided' | 'blocked';
-  priority: number | null;
   supplier_who: string | null;
   supplier_storage: string | null;
-  supplier_comm: string | null;
   input_what: string | null;
-  input_local_storage: string | null;
-  input_preprocess: string | null;
+  inputs_format: string | null;
+  inputs_transformed: boolean | null;
   process_to_information: string | null;
+  process_goal: string | null;
+  process_support_needed: boolean | null;
   decision_upon_info: string | null;
   decision_comm: string | null;
   output_what: string | null;
+  outputs_format: string | null;
   output_storage: string | null;
   output_comm: string | null;
   customer_who: string | null;
   handoff_notes: string | null;
+  comm_methods: string[] | null;
+  estimated_duration_min: number | null;
 };
 
 type Props = {
@@ -36,12 +39,49 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
   const [form, setForm] = useState<Decision | null>(decision);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [commOptions, setCommOptions] = useState<string[]>([]);
+  const [otherEntry, setOtherEntry] = useState('');
 
-  useEffect(() => setForm(decision), [decision]);
+  useEffect(() => {
+    if (!decision) return;
+    setForm(prev => (prev && prev.id === decision.id) ? prev : decision);
+  }, [decision?.id]);
+
+  useEffect(() => {
+    async function load() {
+      if (!decision) return;
+      const { data } = await supabase.from('project_comm_options').select('label').eq('project_id', decision.project_id).order('label');
+      const labels = (data || []).map((r: any) => r.label);
+      const defaults = ['Email','Verbal','Form','Notification','Other'];
+      const set = Array.from(new Set([...defaults, ...labels]));
+      setCommOptions(set);
+    }
+    load();
+  }, [decision?.project_id]);
 
   if (!form) return null;
 
   const update = (k: keyof Decision, v: any) => setForm(prev => prev ? { ...prev, [k]: v } : prev);
+  const toggleCommMethod = (label: string) => {
+    setForm(prev => {
+      if (!prev) return prev;
+      const cur = new Set(prev.comm_methods || []);
+      cur.has(label) ? cur.delete(label) : cur.add(label);
+      return { ...prev, comm_methods: Array.from(cur) };
+    });
+  };
+
+  async function addOtherOption() {
+    const label = otherEntry.trim();
+    if (!label || !decision) return;
+    const { error } = await supabase.from('project_comm_options').insert({ project_id: decision.project_id, label });
+    if (!error) {
+      setCommOptions(prev => Array.from(new Set([...prev, label])));
+      setOtherEntry('');
+    } else {
+      setStatus(error.message);
+    }
+  }
 
   async function save() {
     if (!form) return;
@@ -52,22 +92,25 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
       .update({
         title: form.title,
         statement: form.statement,
-        status: form.status,
-        priority: form.priority,
+        kind: form.kind,
         supplier_who: form.supplier_who,
         supplier_storage: form.supplier_storage,
-        supplier_comm: form.supplier_comm,
         input_what: form.input_what,
-        input_local_storage: form.input_local_storage,
-        input_preprocess: form.input_preprocess,
+        inputs_format: form.inputs_format,
+        inputs_transformed: form.inputs_transformed,
         process_to_information: form.process_to_information,
+        process_goal: form.process_goal,
+        process_support_needed: form.process_support_needed,
         decision_upon_info: form.decision_upon_info,
         decision_comm: form.decision_comm,
         output_what: form.output_what,
+        outputs_format: form.outputs_format,
         output_storage: form.output_storage,
         output_comm: form.output_comm,
         customer_who: form.customer_who,
         handoff_notes: form.handoff_notes,
+        comm_methods: form.comm_methods,
+        estimated_duration_min: form.estimated_duration_min,
       })
       .eq('id', form.id)
       .select('*')
@@ -80,7 +123,7 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
 
   async function remove() {
     if (!form) return;
-    if (!confirm('Delete this decision? This will also remove its links.')) return;
+    if (!confirm('Delete this item? This will also remove its links.')) return;
     const { error } = await supabase.from('decisions').delete().eq('id', form.id);
     if (error) { setStatus(error.message); return; }
     onDelete && onDelete(form.id);
@@ -95,8 +138,8 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
   );
 
   return (
-    <div className="fixed top-0 right-0 w-full sm:w-[420px] h-full z-50 bg-white border-l shadow-soft overflow-y-auto">
-      <div className="p-4 border-b flex items-center justify-between">
+    <div className="absolute right-0 top-0 bottom-0 w-full sm:w-[440px] z-50 bg-white border-l shadow-soft overflow-y-auto">
+      <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white">
         <h2 className="font-semibold">SIPOC Inspector</h2>
         <div className="flex gap-2">
           <button onClick={save} className="btn btn-accent">{saving ? 'Saving…' : 'Save'}</button>
@@ -105,49 +148,69 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
       </div>
 
       <div className="p-4 space-y-4">
+        <Field label="Type">
+          <select className="border rounded-xl px-3 py-2" value={form.kind}
+            onChange={e=>update('kind', e.target.value as any)}>
+            <option value="decision">Decision</option>
+            <option value="data">Data/Information</option>
+            <option value="opportunity">Opportunity</option>
+          </select>
+        </Field>
+
         <Field label="Title">
           <input className="w-full border rounded-xl px-3 py-2"
             value={form.title} onChange={e=>update('title', e.target.value)} />
         </Field>
+
         <Field label="Decision Statement">
           <textarea className="w-full border rounded-xl px-3 py-2"
             value={form.statement ?? ''} onChange={e=>update('statement', e.target.value)} />
         </Field>
 
-        <div className="grid grid-cols-3 gap-2">
-          <Field label="Status">
-            <select className="border rounded-xl px-3 py-2"
-              value={form.status}
-              onChange={e=>update('status', e.target.value as any)}>
-              <option value="queued">Queued</option>
-              <option value="in_progress">In Progress</option>
-              <option value="decided">Decided</option>
-              <option value="blocked">Blocked</option>
-            </select>
-          </Field>
-          <Field label="Priority">
-            <input type="number" className="border rounded-xl px-3 py-2"
-              value={form.priority ?? 0} onChange={e=>update('priority', Number(e.target.value))} />
-          </Field>
-          <div className="flex items-end">
-            <button onClick={remove} className="btn">Delete</button>
-          </div>
-        </div>
-
         <div className="mt-2">
           <h3 className="font-semibold mb-2">Supplier</h3>
           <div className="grid grid-cols-1 gap-2">
-            <Field label="Who supplies information?">
+            <Field label="Who supplies the information?">
               <input className="w-full border rounded-xl px-3 py-2"
                 value={form.supplier_who ?? ''} onChange={e=>update('supplier_who', e.target.value)} />
             </Field>
-            <Field label="Where is supplier information stored?">
+            <Field label="Where is the information stored?">
               <input className="w-full border rounded-xl px-3 py-2"
                 value={form.supplier_storage ?? ''} onChange={e=>update('supplier_storage', e.target.value)} />
             </Field>
             <Field label="How is it communicated?">
-              <input className="w-full border rounded-xl px-3 py-2"
-                value={form.supplier_comm ?? ''} onChange={e=>update('supplier_comm', e.target.value)} />
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  {(commOptions || []).map(opt => (
+                    <label key={opt} className="inline-flex items-center gap-1 text-xs border rounded-full px-2 py-1">
+                      <input type="checkbox"
+                        checked={(form.comm_methods || []).includes(opt)}
+                        onChange={()=>toggleCommMethod(opt)}
+                      />
+                      <span>{opt}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    placeholder="other"
+                    className="flex-1 border rounded-xl px-3 py-2 text-sm placeholder:text-gray-400"
+                    value={otherEntry}
+                    onChange={e=>setOtherEntry(e.target.value)}
+                  />
+                  <button type="button" className="btn" onClick={async () => {
+                    const label = otherEntry.trim();
+                    if (!label || !decision) return;
+                    const { error } = await supabase.from('project_comm_options').insert({ project_id: decision.project_id, label });
+                    if (!error) {
+                      setCommOptions(prev => Array.from(new Set([...prev, label])));
+                      setOtherEntry('');
+                    } else {
+                      setStatus(error.message);
+                    }
+                  }}>Add</button>
+                </div>
+              </div>
             </Field>
           </div>
         </div>
@@ -155,39 +218,43 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
         <div className="mt-2">
           <h3 className="font-semibold mb-2">Inputs</h3>
           <div className="grid grid-cols-1 gap-2">
-            <Field label="What inputs are required?">
+            <Field label="What information is needed?">
               <input className="w-full border rounded-xl px-3 py-2"
                 value={form.input_what ?? ''} onChange={e=>update('input_what', e.target.value)} />
             </Field>
-            <Field label="Local storage of inputs">
+            <Field label="What format is it in?">
               <input className="w-full border rounded-xl px-3 py-2"
-                value={form.input_local_storage ?? ''} onChange={e=>update('input_local_storage', e.target.value)} />
+                value={form.inputs_format ?? ''} onChange={e=>update('inputs_format', e.target.value)} />
             </Field>
-            <Field label="Pre-processing needed">
-              <input className="w-full border rounded-xl px-3 py-2"
-                value={form.input_preprocess ?? ''} onChange={e=>update('input_preprocess', e.target.value)} />
+            <Field label="Is the information transformed into another format?">
+              <select className="border rounded-xl px-3 py-2"
+                value={form.inputs_transformed ? 'yes':'no'}
+                onChange={e=>update('inputs_transformed', e.target.value === 'yes')}>
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
             </Field>
           </div>
         </div>
 
         <div className="mt-2">
-          <h3 className="font-semibold mb-2">Process → Information</h3>
-          <Field label="How are inputs transformed to decision-ready info?">
-            <textarea className="w-full border rounded-xl px-3 py-2"
-              value={form.process_to_information ?? ''} onChange={e=>update('process_to_information', e.target.value)} />
-          </Field>
-        </div>
-
-        <div className="mt-2">
-          <h3 className="font-semibold mb-2">Decision</h3>
+          <h3 className="font-semibold mb-2">Process of Decision Making</h3>
           <div className="grid grid-cols-1 gap-2">
-            <Field label="What is decided upon the information?">
-              <input className="w-full border rounded-xl px-3 py-2"
-                value={form.decision_upon_info ?? ''} onChange={e=>update('decision_upon_info', e.target.value)} />
+            <Field label="Describe high level decision making process for this step.">
+              <textarea className="w-full border rounded-xl px-3 py-2"
+                value={form.process_to_information ?? ''} onChange={e=>update('process_to_information', e.target.value)} />
             </Field>
-            <Field label="How is the decision communicated?">
+            <Field label="What is the goal?">
               <input className="w-full border rounded-xl px-3 py-2"
-                value={form.decision_comm ?? ''} onChange={e=>update('decision_comm', e.target.value)} />
+                value={form.process_goal ?? ''} onChange={e=>update('process_goal', e.target.value)} />
+            </Field>
+            <Field label="Are other people needed to support?">
+              <select className="border rounded-xl px-3 py-2"
+                value={form.process_support_needed ? 'yes':'no'}
+                onChange={e=>update('process_support_needed', e.target.value === 'yes')}>
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
             </Field>
           </div>
         </div>
@@ -199,13 +266,9 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
               <input className="w-full border rounded-xl px-3 py-2"
                 value={form.output_what ?? ''} onChange={e=>update('output_what', e.target.value)} />
             </Field>
-            <Field label="Where is it stored?">
+            <Field label="What format is it in?">
               <input className="w-full border rounded-xl px-3 py-2"
-                value={form.output_storage ?? ''} onChange={e=>update('output_storage', e.target.value)} />
-            </Field>
-            <Field label="How is it communicated?">
-              <input className="w-full border rounded-xl px-3 py-2"
-                value={form.output_comm ?? ''} onChange={e=>update('output_comm', e.target.value)} />
+                value={form.outputs_format ?? ''} onChange={e=>update('outputs_format', e.target.value)} />
             </Field>
           </div>
         </div>
@@ -213,9 +276,13 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
         <div className="mt-2">
           <h3 className="font-semibold mb-2">Customer / Handoff</h3>
           <div className="grid grid-cols-1 gap-2">
-            <Field label="Who is the customer/next owner?">
+            <Field label="Who is the customer (next owner)?">
               <input className="w-full border rounded-xl px-3 py-2"
                 value={form.customer_who ?? ''} onChange={e=>update('customer_who', e.target.value)} />
+            </Field>
+            <Field label="How is it communicated?">
+              <input className="w-full border rounded-xl px-3 py-2"
+                value={form.output_comm ?? ''} onChange={e=>update('output_comm', e.target.value)} />
             </Field>
             <Field label="Handoff notes">
               <textarea className="w-full border rounded-xl px-3 py-2"
@@ -224,7 +291,19 @@ export default function SipocInspector({ decision, onClose, onSaved, onDelete }:
           </div>
         </div>
 
-        {status && <div className="text-xs text-dtl-charcoal">{status}</div>}
+        <div className="mt-2">
+          <h3 className="font-semibold mb-2">Timing (optional)</h3>
+          <Field label="Estimated duration (minutes)">
+            <input type="number" className="w-full border rounded-xl px-3 py-2"
+              value={form.estimated_duration_min ?? 0}
+              onChange={e=>update('estimated_duration_min', Number(e.target.value))} />
+          </Field>
+        </div>
+
+        <div className="pb-16">
+          <button onClick={remove} className="btn">Delete</button>
+          {status && <span className="ml-3 text-xs text-dtl-charcoal">{status}</span>}
+        </div>
       </div>
     </div>
   );
