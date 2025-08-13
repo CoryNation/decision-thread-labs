@@ -76,55 +76,6 @@ function ProjectCanvasInner() {
 
   const edgeColorFor = (k: string) => (k === 'data' ? '#228B22' : '#5A6C80');
 
-  const load = useCallback(async () => {
-    const { data: decisions } = await supabase
-      .from('decisions')
-      .select('id, project_id, kind, title, statement, x, y, queue_time_min, action_time_min')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: true });
-
-    const { data: links } = await supabase
-      .from('decision_links')
-      .select('*')
-      .eq('project_id', projectId);
-
-    const ds = (decisions || []) as Decision[];
-    const ls = (links || []) as Link[];
-
-    setDecisions(ds);
-    setNodes(ds.map((d) => ({
-      id: d.id,
-      type: d.kind || 'decision',
-      draggable: true,
-      position: { x: Number(d.x) || 100, y: Number(d.y) || 100 },
-      data: {
-        label: (d.kind==='gateway' ? 'Choice: ' : '') + (d.title || 'Note'),
-        onRename,
-        onTabCreate: handleTabCreate,
-        isEditing: editingId === d.id,
-        ...colorForKind(d.kind || 'decision')
-      }
-    })));
-
-    setEdges(ls.map((l) => ({
-      id: l.id,
-      source: l.from_id,
-      target: l.to_id,
-      updatable: true,
-      type: l.kind === 'data' ? 'data' : 'process',
-      data: { label: l.kind === 'data' ? 'data' : undefined, edgeColor: edgeColorFor(l.kind), pattern: 'solid', arrowStart: false, arrowEnd: true },
-      markerStart: undefined,
-      markerEnd: { type: MarkerType.ArrowClosed },
-    }) as any));
-  }, [projectId, editingId]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const onDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  }, []);
-
   function addNodeAt(pos: {x:number;y:number}, kind: K, title?: string) {
     return supabase.from('decisions').insert({
       project_id: projectId, kind, title: title || (kind==='data'?'Data':'New item'), x: pos.x, y: pos.y
@@ -174,6 +125,18 @@ function ProjectCanvasInner() {
     }
   }, [projectId, decisions]);
 
+  // NEW: Tab-to-create helper
+  async function handleTabCreate(sourceId: string) {
+    const src = decisions.find(d => d.id === sourceId);
+    if (!src) return;
+    const newPos = { x: (src.x || 0) + NODE_SIZE + 48, y: src.y || 0 };
+    const node = await addNodeAt(newPos, (src.kind as K), undefined);
+    if (node) {
+      await onConnect({ source: sourceId, sourceHandle: null, target: node.id, targetHandle: null });
+      setEditingId(node.id);
+    }
+  }
+
   const onConnectStart = useCallback((_, params: { nodeId?: string | null }) => {
     connectingNodeId.current = params.nodeId || null;
   }, []);
@@ -211,6 +174,55 @@ function ProjectCanvasInner() {
     await supabase.from('decision_links').update({
       from_id: connection.source, to_id: connection.target
     }).eq('id', (oldEdge as any).id);
+  }, []);
+
+  const load = useCallback(async () => {
+    const { data: decisions } = await supabase
+      .from('decisions')
+      .select('id, project_id, kind, title, statement, x, y, queue_time_min, action_time_min')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true });
+
+    const { data: links } = await supabase
+      .from('decision_links')
+      .select('*')
+      .eq('project_id', projectId);
+
+    const ds = (decisions || []) as Decision[];
+    const ls = (links || []) as Link[];
+
+    setDecisions(ds);
+    setNodes(ds.map((d) => ({
+      id: d.id,
+      type: d.kind || 'decision',
+      draggable: true,
+      position: { x: Number(d.x) || 100, y: Number(d.y) || 100 },
+      data: {
+        label: (d.kind==='gateway' ? 'Choice: ' : '') + (d.title || 'Note'),
+        onRename,
+        onTabCreate: handleTabCreate,
+        isEditing: editingId === d.id,
+        ...colorForKind(d.kind || 'decision')
+      }
+    })));
+
+    setEdges(ls.map((l) => ({
+      id: l.id,
+      source: l.from_id,
+      target: l.to_id,
+      updatable: true,
+      type: l.kind === 'data' ? 'data' : 'process',
+      data: { label: l.kind === 'data' ? 'data' : undefined, edgeColor: edgeColorFor(l.kind), pattern: 'solid', arrowStart: false, arrowEnd: true },
+      markerStart: undefined,
+      markerEnd: { type: MarkerType.ArrowClosed },
+    }) as any));
+  }, [projectId, editingId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
   }, []);
 
   function selectNode(nodeId: string) {
