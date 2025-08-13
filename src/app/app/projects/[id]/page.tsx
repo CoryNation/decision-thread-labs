@@ -1,3 +1,4 @@
+
 'use client';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -181,7 +182,7 @@ function ProjectCanvasInner() {
       const kindOfSource = decisions.find(d => d.id === connectingNodeId.current)?.kind || 'decision';
       const newNode = await addNodeAt({ x: p.x - NODE_SIZE, y: p.y - NODE_SIZE }, kindOfSource);
       if (newNode) {
-        await onConnect({ source: connectingNodeId.current!, target: newNode.id });
+        await onConnect({ source: connectingNodeId.current!, sourceHandle: null, target: newNode.id, targetHandle: null });
         setEditingId(newNode.id);
       }
     }
@@ -227,7 +228,7 @@ function ProjectCanvasInner() {
     const position = { x: srcNode.position.x + 160, y: srcNode.position.y };
     const newNode = await addNodeAt(position, srcDecision.kind as K);
     if (newNode) {
-      await onConnect({ source: sourceId, target: newNode.id });
+      await onConnect({ source: sourceId, sourceHandle: null, target: newNode.id, targetHandle: null });
       setEditingId(newNode.id);
     }
   }
