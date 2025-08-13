@@ -1,3 +1,4 @@
+
 'use client';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -5,7 +6,7 @@ import ReactFlow, {
   Background, Controls, MiniMap, MarkerType,
   addEdge, Connection, Edge, Node, OnConnect,
   ReactFlowProvider, useReactFlow,
-  useNodesState, useEdgesState, OnConnectStart, OnConnectEnd, OnEdgeClick, OnEdgeUpdate, UpdateConnection
+  useNodesState, useEdgesState, OnConnectStart, OnConnectEnd, OnEdgeUpdate, UpdateConnection
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { supabase } from '@/lib/supabaseClient';
@@ -173,11 +174,11 @@ function ProjectCanvasInner() {
     }
   }, [projectId, decisions]);
 
-  const onConnectStart: OnConnectStart = useCallback((_, params) => {
+  const onConnectStart = useCallback((_, params: { nodeId?: string | null }) => {
     connectingNodeId.current = params.nodeId || null;
   }, []);
 
-  const onConnectEnd: OnConnectEnd = useCallback(async (event) => {
+  const onConnectEnd = useCallback(async (event: any) => {
     const target = event.target as HTMLElement;
     const isPane = target.classList.contains('react-flow__pane');
     if (isPane && flowWrapper.current && connectingNodeId.current) {
@@ -199,7 +200,8 @@ function ProjectCanvasInner() {
       .eq('id', node.id);
   }, []);
 
-  const onEdgeClick: OnEdgeClick = useCallback((_e, edge) => {
+  // Edge selection & rerouting
+  const onEdgeClick = useCallback((_e: any, edge: Edge) => {
     setSelected(null);
     setSelectedEdge(edge);
   }, []);
