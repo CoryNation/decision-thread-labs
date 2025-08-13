@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 type Decision = {
@@ -8,233 +8,238 @@ type Decision = {
   kind: 'decision'|'data'|'opportunity'|'gateway';
   title: string;
   statement: string | null;
-
-  supplier_who: string | null;
-  supplier_storage: string | null;
-  input_what: string | null;
-  inputs_format: string | null;
-  inputs_transformed: boolean | null;
-
-  process_to_information: string | null;
-  process_goal: string | null;
-  process_support_needed: boolean | null;
-
-  output_what: string | null;
-  outputs_format: string | null;
-  output_storage: string | null;
-  output_comm: string | null;
-
-  customer_who: string | null;
-  handoff_notes: string | null;
-
-  queue_time_min: number | null;
-  action_time_min: number | null;
+  supplier_who?: string | null;
+  supplier_storage?: string | null;
+  comm_methods?: string[] | null;
+  input_what?: string | null;
+  inputs_format?: string | null;
+  process_desc?: string | null;
+  process_goal?: string | null;
+  process_support?: boolean | null;
+  output_what?: string | null;
+  outputs_format?: string | null;
+  customer_who?: string | null;
+  customer_comm?: string[] | null;
+  handoff_notes?: string | null;
+  queue_time_min?: number | null;
+  action_time_min?: number | null;
 };
 
 type Props = {
-  decision: any;
+  decision: Decision;
   onClose: () => void;
-  onSaved?: (d: Decision) => void;
-  onDelete?: (id: string) => void;
+  onSaved: (d: Decision) => void;
+  onDelete: (id: string) => void;
 };
 
+const COMM_CHOICES = ['Email','Verbal','Form','Notification','Other'];
+
 export default function SipocInspector({ decision, onClose, onSaved, onDelete }: Props) {
-  const [form, setForm] = useState<Decision | null>(decision);
-  const [status, setStatus] = useState<string | null>(null);
+  const [form, setForm] = useState<Decision>(decision);
+  const [customMethods, setCustomMethods] = useState<string[]>([]);
 
-  useEffect(() => {
-    if (!decision) { setForm(null); return; }
-    setForm({ ...(decision as Decision) });
-  }, [decision?.id]);
+  useEffect(() => { setForm(decision); }, [decision?.id]);
 
-  useEffect(() => {
-    const prevBody = document.body.style.overflow;
-    const prevHtml = (document.documentElement as HTMLElement).style.overflow;
-    document.body.style.overflow = 'hidden';
-    (document.documentElement as HTMLElement).style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prevBody; (document.documentElement as HTMLElement).style.overflow = prevHtml; };
-  }, []);
+  const toggleArr = (field: keyof Decision, value: string) => {
+    const arr = (form[field] as string[] | null) || [];
+    const next = arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
+    setForm({ ...form, [field]: next });
+  };
 
-  if (!form) return null;
+  const save = async () => {
+    const { data, error } = await supabase.from('decisions')
+      .update({
+        title: form.title,
+        statement: form.statement,
+        supplier_who: form.supplier_who,
+        supplier_storage: form.supplier_storage,
+        comm_methods: form.comm_methods || [],
+        input_what: form.input_what,
+        inputs_format: form.inputs_format,
+        process_desc: form.process_desc,
+        process_goal: form.process_goal,
+        process_support: form.process_support,
+        output_what: form.output_what,
+        outputs_format: form.outputs_format,
+        customer_who: form.customer_who,
+        customer_comm: form.customer_comm || [],
+        handoff_notes: form.handoff_notes,
+        queue_time_min: form.queue_time_min,
+        action_time_min: form.action_time_min,
+        kind: form.kind
+      })
+      .eq('id', decision.id)
+      .select('*')
+      .single();
+    if (!error && data) onSaved(data as any);
+  };
 
-  const stopAll = (e: any) => { e.stopPropagation(); };
-  const update = (k: keyof Decision, v: any) => setForm(prev => prev ? { ...prev, [k]: v } : prev);
+  const remove = async () => {
+    await supabase.from('decisions').delete().eq('id', decision.id);
+    onDelete(decision.id);
+    onClose();
+  };
 
-  async function save() {
-    if (!form) return;
-    const { data, error } = await supabase
-      .from('decisions')
-      .update({ ...form })
-      .eq('id', form.id).select('*').single();
-    if (error) { setStatus(error.message); return; }
-    setStatus('Saved'); onSaved && onSaved(data as any);
-  }
+  const addCustomMethod = (value: string) => {
+    if (!value) return;
+    if (!customMethods.includes(value)) setCustomMethods([...customMethods, value]);
+    setForm({ ...form, comm_methods: [ ...(form.comm_methods||[]), value ] });
+  };
 
-  async function remove() {
-    if (!form) return;
-    if (!confirm('Delete this item? This will also remove its links.')) return;
-    const { error } = await supabase.from('decisions').delete().eq('id', form.id);
-    if (error) { setStatus(error.message); return; }
-    onDelete && onDelete(form.id); onClose();
-  }
-
-  const Fab = ({ title, onClick, kind='default' } : any) => (
-    <button
-      title={title}
-      onClick={onClick}
-      className={
-        kind==='primary' ? 'w-14 h-14 rounded-full bg-[#20B2AA] text-white flex items-center justify-center shadow'
-        : kind==='danger' ? 'w-14 h-14 rounded-full bg-white border border-red-500 text-red-600 flex items-center justify-center'
-        : 'w-14 h-14 rounded-full bg-white border border-gray-300 text-gray-500 flex items-center justify-center'
-      }
-    >
-      {title==='Save' && (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5a2 2 0 0 0-2 2v14l4-4h10a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z"/></svg>
-      )}
-      {title==='Close' && (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg>
-      )}
-      {title==='Delete' && (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 7h12M9 7V5h6v2m-7 4v7m4-7v7m4-7v7M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"/></svg>
-      )}
-    </button>
-  );
-
-  const Section = ({ title, children } : any) => (
-    <div className="mt-3">
-      <h3 className="font-semibold mb-2">{title}</h3>
-      <div className="grid grid-cols-1 gap-2">
-        {children}
-      </div>
-    </div>
-  );
-
-  const Field = ({ label, children }: any) => (
-    <label className="block text-sm" onPointerDownCapture={stopAll} onMouseDown={stopAll} onClick={stopAll}>
-      <span className="text-dtl-charcoal">{label}</span>
-      <div className="mt-1">{children}</div>
-    </label>
-  );
+  const allMethods = useMemo(() => [...COMM_CHOICES, ...customMethods], [customMethods]);
 
   return (
-    <div
-      className="absolute right-0 top-0 h-[80vh] w-full sm:w-[360px] z-50 bg-white border-l shadow-soft"
-      style={{ overflow: 'hidden' }}
-      onPointerDownCapture={stopAll}
-      onMouseDown={stopAll}
-      onWheel={stopAll}
-    >
-      <div className="p-3 border-b flex items-center justify-between sticky top-0 bg-white z-10">
-        <h2 className="font-semibold">SIPOC Inspector</h2>
+    <div className="absolute right-4 top-4 z-20 rounded-xl border bg-white p-3 shadow-lg inspector">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-sm font-semibold">SIPOC Inspector</div>
         <div className="flex gap-2">
-          <Fab title="Save" kind="primary" onClick={save} />
-          <Fab title="Delete" kind="danger" onClick={remove} />
-          <Fab title="Close" onClick={onClose} />
+          <button className="fab fab-primary" onClick={save} title="Save">
+            <span className="material-symbols-outlined">save</span>
+          </button>
+          <button className="fab fab-outline-red" onClick={remove} title="Delete">
+            <span className="material-symbols-outlined">delete</span>
+          </button>
+          <button className="fab fab-outline-muted" onClick={onClose} title="Close">
+            <span className="material-symbols-outlined">close</span>
+          </button>
         </div>
       </div>
 
-      <div className="p-4 space-y-4 overflow-y-auto h-[calc(80vh-72px)]">
-        <Field label="Type">
-          <select className="border rounded-xl px-3 py-2" value={form.kind}
-            onChange={e=>update('kind', e.target.value as any)}>
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-slate-500">Type</label>
+          <select className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            value={form.kind}
+            onChange={(e) => setForm({ ...form, kind: e.target.value as any })}>
             <option value="decision">Decision</option>
-            <option value="data">Data/Information</option>
+            <option value="data">Data</option>
             <option value="opportunity">Opportunity</option>
             <option value="gateway">Choice</option>
           </select>
-        </Field>
+        </div>
 
-        <Field label="Title">
-          <input className="w-full border rounded-xl px-3 py-2"
-            value={form.title || ''} onChange={e=>update('title', e.target.value)} />
-        </Field>
+        <div>
+          <label className="block text-xs font-medium text-slate-500">Title</label>
+          <input className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            value={form.title || ''}
+            onChange={(e) => setForm({ ...form, title: e.target.value })} />
+        </div>
 
-        <Field label="Decision Statement">
-          <textarea className="w-full border rounded-xl px-3 py-2"
-            value={form.statement ?? ''} onChange={e=>update('statement', e.target.value)} />
-        </Field>
+        <div>
+          <label className="block text-xs font-semibold text-slate-600 mt-2">Supplier</label>
+          <label className="block text-xs text-slate-500">Who supplies the information?</label>
+          <input className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            value={form.supplier_who || ''}
+            onChange={(e) => setForm({ ...form, supplier_who: e.target.value })} />
 
-        <Section title="Supplier">
-          <Field label="Who supplies the information?">
-            <input className="w-full border rounded-xl px-3 py-2"
-              value={form.supplier_who ?? ''} onChange={e=>update('supplier_who', e.target.value)} />
-          </Field>
-          <Field label="Where is the information stored?">
-            <input className="w-full border rounded-xl px-3 py-2"
-              value={form.supplier_storage ?? ''} onChange={e=>update('supplier_storage', e.target.value)} />
-          </Field>
-        </Section>
+          <label className="mt-2 block text-xs text-slate-500">Where is the information stored?</label>
+          <input className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            value={form.supplier_storage || ''}
+            onChange={(e) => setForm({ ...form, supplier_storage: e.target.value })} />
 
-        <Section title="Inputs">
-          <Field label="What information is needed?">
-            <textarea className="w-full border rounded-xl px-3 py-2"
-              value={form.input_what ?? ''} onChange={e=>update('input_what', e.target.value)} />
-          </Field>
-          <Field label="What format is it in?">
-            <input className="w-full border rounded-xl px-3 py-2"
-              value={form.inputs_format ?? ''} onChange={e=>update('inputs_format', e.target.value)} />
-          </Field>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={Boolean(form.inputs_transformed)} onChange={e=>update('inputs_transformed', e.target.checked)} />
-            Is the information transformed into another format?
-          </label>
-        </Section>
-
-        <Section title="Process of Decision Making">
-          <Field label="Describe high level decision making process for this step.">
-            <textarea className="w-full border rounded-xl px-3 py-2"
-              value={form.process_to_information ?? ''} onChange={e=>update('process_to_information', e.target.value)} />
-          </Field>
-          <Field label="What is the goal?">
-            <input className="w-full border rounded-xl px-3 py-2"
-              value={form.process_goal ?? ''} onChange={e=>update('process_goal', e.target.value)} />
-          </Field>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={Boolean(form.process_support_needed)} onChange={e=>update('process_support_needed', e.target.checked)} />
-            Are other people needed to support?
-          </label>
-        </Section>
-
-        <Section title="Outputs">
-          <Field label="What is the output?">
-            <textarea className="w-full border rounded-xl px-3 py-2"
-              value={form.output_what ?? ''} onChange={e=>update('output_what', e.target.value)} />
-          </Field>
-          <Field label="What format is it in?">
-            <input className="w-full border rounded-xl px-3 py-2"
-              value={form.outputs_format ?? ''} onChange={e=>update('outputs_format', e.target.value)} />
-          </Field>
-        </Section>
-
-        <Section title="Customer">
-          <Field label="Who is the customer (next owner)?">
-            <input className="w-full border rounded-xl px-3 py-2"
-              value={form.customer_who ?? ''} onChange={e=>update('customer_who', e.target.value)} />
-          </Field>
-          <Field label="How is it communicated?">
-            <input className="w-full border rounded-xl px-3 py-2"
-              value={form.output_comm ?? ''} onChange={e=>update('output_comm', e.target.value)} />
-          </Field>
-          <Field label="Handoff notes">
-            <textarea className="w-full border rounded-xl px-3 py-2"
-              value={form.handoff_notes ?? ''} onChange={e=>update('handoff_notes', e.target.value)} />
-          </Field>
-        </Section>
-
-        <Section title="Timing">
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Queue time (min)">
-              <input type="number" className="w-full border rounded-xl px-3 py-2"
-                value={form.queue_time_min ?? 0} onChange={e=>update('queue_time_min', Number(e.target.value))} />
-            </Field>
-            <Field label="Action time (min)">
-              <input type="number" className="w-full border rounded-xl px-3 py-2"
-                value={form.action_time_min ?? 0} onChange={e=>update('action_time_min', Number(e.target.value))} />
-            </Field>
+          <label className="mt-2 block text-xs text-slate-500">How is it communicated?</label>
+          <div className="flex flex-wrap gap-2">
+            {allMethods.map((m) => (
+              <label key={m} className="flex items-center gap-1 text-xs">
+                <input type="checkbox"
+                  checked={(form.comm_methods||[]).includes(m)}
+                  onChange={() => toggleArr('comm_methods', m)} />
+                <span>{m}</span>
+              </label>
+            ))}
           </div>
-        </Section>
+          <div className="mt-2 flex gap-2">
+            <input placeholder="other" className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { addCustomMethod((e.target as HTMLInputElement).value.trim()); (e.target as HTMLInputElement).value=''; }
+              }} />
+          </div>
+        </div>
 
-        <div className="pb-16">{status && <span className="text-xs text-gray-600">{status}</span>}</div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-600 mt-2">Inputs</label>
+          <label className="block text-xs text-slate-500">What information is needed?</label>
+          <input className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            value={form.input_what || ''}
+            onChange={(e) => setForm({ ...form, input_what: e.target.value })} />
+
+          <label className="mt-2 block text-xs text-slate-500">What format is it in?</label>
+          <input className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            value={form.inputs_format || ''}
+            onChange={(e) => setForm({ ...form, inputs_format: e.target.value })} />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-600 mt-2">Process of Decision Making</label>
+          <label className="block text-xs text-slate-500">Describe high level decision making process for this step.</label>
+          <textarea className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            rows={3}
+            value={form.process_desc || ''}
+            onChange={(e) => setForm({ ...form, process_desc: e.target.value })} />
+
+          <label className="mt-2 block text-xs text-slate-500">What is the goal?</label>
+          <input className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            value={form.process_goal || ''}
+            onChange={(e) => setForm({ ...form, process_goal: e.target.value })} />
+
+          <label className="mt-2 block text-xs text-slate-500">Are other people needed to support?</label>
+          <input type="checkbox"
+            checked={!!form.process_support}
+            onChange={(e) => setForm({ ...form, process_support: e.target.checked })} />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-600 mt-2">Outputs</label>
+          <label className="block text-xs text-slate-500">What is the output?</label>
+          <input className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            value={form.output_what || ''}
+            onChange={(e) => setForm({ ...form, output_what: e.target.value })} />
+
+          <label className="mt-2 block text-xs text-slate-500">What format is it in?</label>
+          <input className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            value={form.outputs_format || ''}
+            onChange={(e) => setForm({ ...form, outputs_format: e.target.value })} />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-600 mt-2">Customer</label>
+          <label className="block text-xs text-slate-500">Who is the customer (next owner)?</label>
+          <input className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            value={form.customer_who || ''}
+            onChange={(e) => setForm({ ...form, customer_who: e.target.value })} />
+
+          <label className="mt-2 block text-xs text-slate-500">How is it communicated?</label>
+          <div className="flex flex-wrap gap-2">
+            {allMethods.map((m) => (
+              <label key={m} className="flex items-center gap-1 text-xs">
+                <input type="checkbox"
+                  checked={(form.customer_comm||[]).includes(m)}
+                  onChange={() => toggleArr('customer_comm', m)} />
+                <span>{m}</span>
+              </label>
+            ))}
+          </div>
+
+          <label className="mt-2 block text-xs text-slate-500">Handoff notes</label>
+          <textarea className="w-full rounded border border-slate-300 px-2 py-1 text-sm" rows={2}
+            value={form.handoff_notes || ''}
+            onChange={(e) => setForm({ ...form, handoff_notes: e.target.value })} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-medium text-slate-500">Queue time (min)</label>
+            <input type="number" className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+              value={form.queue_time_min || 0}
+              onChange={(e) => setForm({ ...form, queue_time_min: Number(e.target.value) })} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500">Action time (min)</label>
+            <input type="number" className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+              value={form.action_time_min || 0}
+              onChange={(e) => setForm({ ...form, action_time_min: Number(e.target.value) })} />
+          </div>
+        </div>
       </div>
     </div>
   );

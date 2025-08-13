@@ -1,71 +1,61 @@
 'use client';
-import React, { useState, useEffect } from 'react';
-
-type EdgeLike = any;
+import { useEffect, useState } from 'react';
 
 type Props = {
-  edge: EdgeLike;
+  edge: any;
   onClose: () => void;
-  onChange: (updates: Partial<EdgeLike>) => void;
+  onChange: (upd: any) => void;
 };
 
 export default function EdgeInspector({ edge, onClose, onChange }: Props) {
-  const [pattern, setPattern] = useState<string>(edge?.data?.pattern || 'solid');
-  const [arrowStart, setArrowStart] = useState<boolean>(Boolean(edge?.data?.arrowStart));
-  const [arrowEnd, setArrowEnd] = useState<boolean>(edge?.data?.arrowEnd !== false); // default true
+  const [pattern, setPattern] = useState(edge?.data?.pattern || 'solid');
+  const [arrowStart, setArrowStart] = useState(!!edge?.data?.arrowStart);
+  const [arrowEnd, setArrowEnd] = useState(edge?.data?.arrowEnd !== false);
 
   useEffect(() => {
     setPattern(edge?.data?.pattern || 'solid');
-    setArrowStart(Boolean(edge?.data?.arrowStart));
+    setArrowStart(!!edge?.data?.arrowStart);
     setArrowEnd(edge?.data?.arrowEnd !== false);
   }, [edge?.id]);
 
-  function apply() {
-    onChange({
-      data: { ...(edge.data||{}), pattern, arrowStart, arrowEnd },
-    });
-  }
-
-  const stopAll = (e: any) => e.stopPropagation();
+  const save = () => {
+    onChange({ ...edge, data: { ...(edge.data || {}), pattern, arrowStart, arrowEnd } });
+  };
 
   return (
-    <div
-      className="absolute right-0 top-0 h-[80vh] w-full sm:w-[320px] z-50 bg-white border-l shadow-soft"
-      style={{ overflow: 'hidden' }}
-      onPointerDownCapture={stopAll}
-      onMouseDown={stopAll}
-      onWheel={stopAll}
-    >
-      <div className="p-3 border-b flex items-center justify-between sticky top-0 bg-white z-10">
-        <h2 className="font-semibold">Edge Settings</h2>
+    <div className="absolute right-4 top-4 z-20 rounded-xl border bg-white p-3 shadow-lg inspector">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-sm font-semibold">Line Properties</div>
         <div className="flex gap-2">
-          <button onClick={apply} className="px-3 py-1 rounded bg-[#20B2AA] text-white text-sm">Apply</button>
-          <button onClick={onClose} className="px-3 py-1 rounded border text-sm">Close</button>
+          <button className="fab fab-primary" onClick={save} title="Save">
+            <span className="material-symbols-outlined">save</span>
+          </button>
+          <button className="fab fab-outline-muted" onClick={onClose} title="Close">
+            <span className="material-symbols-outlined">close</span>
+          </button>
         </div>
       </div>
 
-      <div className="p-4 space-y-4 overflow-y-auto h-[calc(80vh-52px)]">
-        <label className="block text-sm">
-          <span>Line style</span>
-          <select className="w-full border rounded px-2 py-2 mt-1" value={pattern} onChange={e=>setPattern(e.target.value)}>
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-slate-500">Line style</label>
+          <select className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+            value={pattern} onChange={(e) => setPattern(e.target.value)}>
             <option value="solid">Solid</option>
             <option value="dashed">Dashed</option>
             <option value="dotted">Dotted</option>
           </select>
-        </label>
-
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={arrowStart} onChange={e=>setArrowStart(e.target.checked)} />
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          <label className="flex items-center gap-1">
+            <input type="checkbox" checked={arrowStart} onChange={(e) => setArrowStart(e.target.checked)} />
             Arrow at start
           </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={arrowEnd} onChange={e=>setArrowEnd(e.target.checked)} />
+          <label className="flex items-center gap-1">
+            <input type="checkbox" checked={arrowEnd} onChange={(e) => setArrowEnd(e.target.checked)} />
             Arrow at end
           </label>
         </div>
-
-        <p className="text-xs text-gray-500">Tip: drag an edge endpoint to reroute it to a different sticky.</p>
       </div>
     </div>
   );
