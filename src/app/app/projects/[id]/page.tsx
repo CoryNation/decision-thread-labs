@@ -6,7 +6,7 @@ import ReactFlow, {
   Background, Controls, MiniMap, MarkerType,
   addEdge, Connection, Edge, Node, OnConnect,
   ReactFlowProvider, useReactFlow,
-  useNodesState, useEdgesState, OnConnectStart, OnConnectEnd, OnEdgeUpdate, UpdateConnection
+  useNodesState, useEdgesState, OnConnectStart, OnConnectEnd
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { supabase } from '@/lib/supabaseClient';
@@ -206,7 +206,7 @@ function ProjectCanvasInner() {
     setSelectedEdge(edge);
   }, []);
 
-  const onEdgeUpdate: OnEdgeUpdate = useCallback(async (oldEdge, connection: UpdateConnection) => {
+  const onEdgeUpdate = useCallback(async (oldEdge: Edge, connection: Connection) => {
     setEdges((eds: any) => eds.map((e: any) => e.id === oldEdge.id ? { ...e, source: connection.source, target: connection.target } : e));
     await supabase.from('decision_links').update({
       from_id: connection.source, to_id: connection.target
