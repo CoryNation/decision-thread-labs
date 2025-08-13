@@ -1,21 +1,18 @@
-
 'use client';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   Background, Controls, MiniMap, MarkerType,
-  addEdge, Connection, Edge, Node, OnConnect,
+  addEdge, Connection, Node, OnConnect,
   ReactFlowProvider, useReactFlow,
-  useNodesState, useEdgesState
+  useNodesState, useEdgesState, OnConnectStart, OnConnectEnd
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { supabase } from '@/lib/supabaseClient';
 import CanvasToolbar from '@/components/CanvasToolbar';
 import SipocInspector from '@/components/SipocInspector';
 import StickyNode from '@/components/nodes/StickyNode';
-import GatewayNode from '@/components/nodes/GatewayNode';
-import ProcessEdge from '@/components/edges/ProcessEdge';
-import DataEdge from '@/components/edges/DataEdge';
+import OrthEdge from '@/components/edges/OrthEdge';
 
 type K = 'decision'|'data'|'opportunity'|'gateway';
 
@@ -37,12 +34,12 @@ const nodeTypes = {
   decision: StickyNode,
   data: StickyNode,
   opportunity: StickyNode,
-  gateway: GatewayNode,
+  gateway: StickyNode,
 };
 
 const edgeTypes = {
-  process: ProcessEdge,
-  data: DataEdge,
+  process: OrthEdge,
+  data: OrthEdge,
 };
 
 export default function ProjectCanvasPage() {
@@ -59,19 +56,22 @@ function ProjectCanvasInner() {
   const [view, setView] = useState<'process'|'information'|'opportunities'>('process');
 
   const [decisions, setDecisions] = useState<Decision[]>([]);
-  // IMPORTANT: provide node DATA generic (or none), not the Node type
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selected, setSelected] = useState<Decision | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const flowWrapper = useRef<HTMLDivElement>(null);
+  const connectingNodeId = useRef<string | null>(null);
   const { screenToFlowPosition } = useReactFlow();
 
   const colorForKind = (k: K) => {
-    if (k === 'data') return { bg: '#E7F3EA', textColor:'#1F7A1F' };
+    if (k === 'data') return { bg: '#DCFCE7', textColor:'#1F7A1F' };
     if (k === 'opportunity') return { bg: '#CDE3FF', textColor:'#1f2937' };
-    if (k === 'decision') return { bg: '#fff7b3', textColor:'#1f2937' };
+    if (k === 'decision') return { bg: '#FFF7B3', textColor:'#1f2937' };
     return { bg: '#F6E7B2', textColor:'#1f2937' };
   };
+
+  const edgeColorFor = (k: string) => (k === 'data' ? '#228B22' : '#5A6C80');
 
   const load = useCallback(async () => {
     const { data: decisions } = await supabase
@@ -94,7 +94,13 @@ function ProjectCanvasInner() {
       type: d.kind || 'decision',
       draggable: true,
       position: { x: Number(d.x) || 100, y: Number(d.y) || 100 },
-      data: { label: d.title || 'Note', onRename, ...colorForKind(d.kind || 'decision') }
+      data: {
+        label: (d.kind==='gateway' ? 'Choice: ' : '') + (d.title || 'Note'),
+        onRename,
+        onTabCreate: handleTabCreate,
+        isEditing: editingId === d.id,
+        ...colorForKind(d.kind || 'decision')
+      }
     })));
 
     setEdges(ls.map((l) => ({
@@ -102,10 +108,10 @@ function ProjectCanvasInner() {
       source: l.from_id,
       target: l.to_id,
       type: l.kind === 'data' ? 'data' : 'process',
-      data: { label: l.kind === 'data' ? 'data' : undefined },
+      data: { label: l.kind === 'data' ? 'data' : undefined, edgeColor: edgeColorFor(l.kind) },
       markerEnd: { type: MarkerType.ArrowClosed }
     })));
-  }, [projectId]);
+  }, [projectId, editingId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -115,7 +121,7 @@ function ProjectCanvasInner() {
   }, []);
 
   function addNodeAt(pos: {x:number;y:number}, kind: K, title?: string) {
-    supabase.from('decisions').insert({
+    return supabase.from('decisions').insert({
       project_id: projectId, kind, title: title || (kind==='data'?'Data':'New item'), x: pos.x, y: pos.y
     }).select('*').single().then(({ data }) => {
       if (data) {
@@ -124,9 +130,11 @@ function ProjectCanvasInner() {
         setNodes(prev => [...prev, {
           id: d.id, type: d.kind, draggable: true,
           position: {x:d.x||0,y:d.y||0},
-          data: { label: d.title, onRename, ...colorForKind(d.kind) }
+          data: { label: (d.kind==='gateway'?'Choice: ':'') + d.title, onRename, onTabCreate: handleTabCreate, isEditing: false, ...colorForKind(d.kind) }
         }]);
+        return d;
       }
+      return null;
     });
   }
 
@@ -154,11 +162,31 @@ function ProjectCanvasInner() {
       setEdges((eds) => addEdge({
         id: data.id, source: data.from_id, target: data.to_id,
         type: kind === 'data' ? 'data' : 'process',
-        data: { label: kind === 'data' ? 'data' : undefined },
+        data: { label: kind === 'data' ? 'data' : undefined, edgeColor: edgeColorFor(kind) },
         markerEnd: { type: MarkerType.ArrowClosed }
       }, eds));
     }
   }, [projectId, decisions]);
+
+  const onConnectStart: OnConnectStart = useCallback((_, params) => {
+    connectingNodeId.current = params.nodeId || null;
+  }, []);
+
+  const onConnectEnd: OnConnectEnd = useCallback(async (event) => {
+    const target = event.target as HTMLElement;
+    const isPane = target.classList.contains('react-flow__pane');
+    if (isPane && flowWrapper.current && connectingNodeId.current) {
+      const bounds = flowWrapper.current.getBoundingClientRect();
+      const p = screenToFlowPosition({ x: (event as MouseEvent).clientX - bounds.left, y: (event as MouseEvent).clientY - bounds.top });
+      const kindOfSource = decisions.find(d => d.id === connectingNodeId.current)?.kind || 'decision';
+      const newNode = await addNodeAt({ x: p.x - NODE_SIZE, y: p.y - NODE_SIZE }, kindOfSource);
+      if (newNode) {
+        await onConnect({ source: connectingNodeId.current!, target: newNode.id });
+        setEditingId(newNode.id);
+      }
+    }
+    connectingNodeId.current = null;
+  }, [screenToFlowPosition, decisions, onConnect]);
 
   const onNodeDragStop = useCallback(async (_e: any, node: Node) => {
     await supabase.from('decisions')
@@ -173,13 +201,17 @@ function ProjectCanvasInner() {
 
   async function onRename(id: string, title: string) {
     await supabase.from('decisions').update({ title }).eq('id', id);
-    setNodes(prev => prev.map(n => n.id === id ? { ...n, data: { ...n.data, label: title } } : n));
+    setNodes(prev => prev.map(n => n.id === id ? { ...n, data: { ...n.data, label: n.type==='gateway' ? 'Choice: ' + title : title } } : n));
     setDecisions(prev => prev.map(d => d.id===id ? { ...d, title } : d));
   }
 
   function onSaved(updated: any) {
     setDecisions(prev => prev.map(d => d.id === updated.id ? updated : d));
-    setNodes(prev => prev.map(n => n.id === updated.id ? { ...n, type: updated.kind, data: { ...n.data, label: updated.title } } : n));
+    setNodes(prev => prev.map(n => n.id === updated.id ? {
+      ...n,
+      type: updated.kind,
+      data: { ...n.data, label: (updated.kind==='gateway'?'Choice: ':'') + updated.title, ...colorForKind(updated.kind) }
+    } : n));
   }
 
   function onDelete(id: string) {
@@ -188,10 +220,24 @@ function ProjectCanvasInner() {
     setDecisions(prev => prev.filter(d => d.id !== id));
   }
 
+  async function handleTabCreate(sourceId: string) {
+    const srcNode = nodes.find(n => n.id === sourceId);
+    const srcDecision = decisions.find(d => d.id === sourceId);
+    if (!srcNode || !srcDecision || !flowWrapper.current) return;
+    const position = { x: srcNode.position.x + 160, y: srcNode.position.y };
+    const newNode = await addNodeAt(position, srcDecision.kind as K);
+    if (newNode) {
+      await onConnect({ source: sourceId, target: newNode.id });
+      setEditingId(newNode.id);
+    }
+  }
+
   const filteredNodes = useMemo(() => {
-    if (view === 'information') return nodes.map(n => ({ ...n, hidden: n.type !== 'data' }));
-    if (view === 'opportunities') return nodes.map(n => ({ ...n, hidden: n.type !== 'opportunity' }));
-    return nodes;
+    return nodes.map(n => {
+      if (view === 'information') return { ...n, hidden: n.type !== 'data' };
+      if (view === 'opportunities') return { ...n, hidden: n.type !== 'opportunity' };
+      return n;
+    });
   }, [nodes, view]);
 
   const filteredEdges = useMemo(() => {
@@ -224,7 +270,9 @@ function ProjectCanvasInner() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onPaneClick={() => setSelected(null)}
+          onConnectStart={onConnectStart}
+          onConnectEnd={onConnectEnd}
+          onPaneClick={() => { setSelected(null); setEditingId(null); }}
           onNodeClick={(_e, n) => selectNode(n.id)}
           onNodeDragStop={onNodeDragStop}
           onDrop={onDrop}
