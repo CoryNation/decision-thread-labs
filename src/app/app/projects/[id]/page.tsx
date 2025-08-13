@@ -64,7 +64,6 @@ function ProjectCanvasInner() {
 
   const edgeColorFor = (k: string) => (k === 'data' ? '#228B22' : '#5A6C80');
 
-  // NEW: rename handler used by StickyNode to save title and update label locally
   const onRename = useCallback(async (id: string, title: string) => {
     await supabase.from('decisions').update({ title }).eq('id', id);
     setDecisions(prev => prev.map(d => d.id === id ? { ...d, title } : d));
@@ -300,9 +299,10 @@ function ProjectCanvasInner() {
         <SipocInspector
           decision={selected}
           onClose={() => setSelected(null)}
-          onSaved={(d) => {
-            setDecisions(prev => prev.map(x => x.id===d.id? d: x));
-            setNodes(prev => prev.map(n => n.id===d.id? { ...n, type: d.kind, data:{ ...n.data, label: (d.kind==='gateway'?'Choice: ':'') + d.title, ...colorForKind(d.kind) } }: n));
+          onSaved={(d: any) => {
+            // Merge with existing item to preserve x,y and other runtime-only fields
+            setDecisions(prev => prev.map((x: any) => x.id === d.id ? { ...x, ...d } : x));
+            setNodes(prev => prev.map((n: any) => n.id===d.id ? { ...n, type: d.kind, data:{ ...n.data, label: (d.kind==='gateway'?'Choice: ':'') + d.title, ...colorForKind(d.kind) } } : n));
           }}
           onDelete={(id) => {
             setEdges(prev => prev.filter(e => e.source !== id && e.target !== id));
