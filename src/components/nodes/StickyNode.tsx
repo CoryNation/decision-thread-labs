@@ -51,19 +51,19 @@ export default function StickyNode({ id, data, selected }: NodeProps<Data>) {
     <div
       className={clsx(
         'rounded-xl relative shadow-md border',
-        selected ? 'ring-2 ring-[#20B2AA] shadow-lg' : 'shadow',
+        selected ? 'ring-2 ring-[#20B2AA] shadow-xl' : 'shadow',
       )}
       style={{ width: 120, height: 120, background: data.bg, color: data.textColor }}
       onDoubleClick={onDouble}
     >
-      {/* folded corner rotated CCW */}
-      <div className="absolute bottom-1 right-1 w-0 h-0 border-t-8 border-l-8 border-t-white/70 border-l-transparent rotate-[-90deg]" />
+      {/* folded corner, flush to edges */}
+      <div className="absolute bottom-0 right-0 w-0 h-0 border-t-[14px] border-l-[14px] border-t-white/70 border-l-transparent rotate-[-90deg]" />
 
       <div className="p-2 text-[12px] leading-snug">
         {editing ? (
           <input
             ref={inputRef}
-            className="w-full bg-white/60 rounded px-1 py-0.5 outline-none"
+            className="w-full bg-white/70 rounded px-1 py-0.5 outline-none"
             value={value}
             onChange={(e)=>setValue(e.target.value)}
             onBlur={commit}

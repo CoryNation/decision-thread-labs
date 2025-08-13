@@ -4,7 +4,7 @@ import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath } from 'reactflow';
 export default function OrthEdge(props: any) {
   const {
     id, sourceX, sourceY, targetX, targetY,
-    sourcePosition, targetPosition, data
+    sourcePosition, targetPosition, data, markerEnd, markerStart, style
   } = props;
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
@@ -12,11 +12,18 @@ export default function OrthEdge(props: any) {
     borderRadius: 8, offset: 10,
   });
 
-  const stroke = data?.edgeColor || '#64748b';
+  const stroke = data?.edgeColor || (style?.stroke as string) || '#64748b';
+  const dash = data?.pattern === 'dotted' ? '2 6' : data?.pattern === 'dashed' ? '8 6' : style?.strokeDasharray;
 
   return (
     <>
-      <BaseEdge id={id} path={edgePath} style={{ stroke, strokeWidth: 2 }} />
+      <BaseEdge
+        id={id}
+        path={edgePath}
+        style={{ ...(style||{}), stroke, strokeWidth: 2, strokeDasharray: dash }}
+        markerStart={markerStart}
+        markerEnd={markerEnd}
+      />
       {data?.label && (
         <EdgeLabelRenderer>
           <div

@@ -20,7 +20,7 @@ export default function CanvasToolbar({ view, setView }: Props) {
   };
 
   return (
-    <aside className="absolute left-4 top-4 z-50 bg-white/95 backdrop-blur rounded-xl shadow-soft p-3 w-[160px]">
+    <aside className="absolute left-4 top-4 z-50 bg-white/95 backdrop-blur rounded-xl shadow-soft p-3 w-[180px]">
       <div className="text-xs font-semibold text-gray-700 mb-2">View</div>
       <select
         className="w-full text-sm border rounded-lg px-2 py-1 mb-3"
@@ -33,7 +33,7 @@ export default function CanvasToolbar({ view, setView }: Props) {
       </select>
 
       <div className="text-xs font-semibold text-gray-700 mb-2">Tools</div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2">
         {tools.map(t => (
           <div key={t.type}
             onDragStart={(e)=>onDragStart(e, t.type)}
@@ -42,8 +42,8 @@ export default function CanvasToolbar({ view, setView }: Props) {
             style={{ background: t.color }}
             title={t.label}
           >
-            <div className="relative w-10 h-10">
-              <div className="absolute bottom-0 right-0 w-0 h-0 border-t-[10px] border-l-[10px] border-t-white/70 border-l-transparent rotate-[-90deg]" />
+            <div className="relative" style={{ width: 90, height: 90 }}>
+              <div className="absolute bottom-0 right-0 w-0 h-0 border-t-[14px] border-l-[14px] border-t-white/70 border-l-transparent rotate-[-90deg]" />
               <div className="text-[10px] leading-tight" style={{color: t.text}}>{t.label}</div>
             </div>
           </div>
