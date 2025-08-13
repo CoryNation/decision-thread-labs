@@ -64,6 +64,17 @@ function ProjectCanvasInner() {
 
   const edgeColorFor = (k: string) => (k === 'data' ? '#228B22' : '#5A6C80');
 
+  // NEW: rename handler used by StickyNode to save title and update label locally
+  const onRename = useCallback(async (id: string, title: string) => {
+    await supabase.from('decisions').update({ title }).eq('id', id);
+    setDecisions(prev => prev.map(d => d.id === id ? { ...d, title } : d));
+    setNodes(prev => prev.map((n: any) => {
+      if (n.id !== id) return n;
+      const isGateway = (n.type as string) === 'gateway';
+      return { ...n, data: { ...n.data, label: (isGateway ? 'Choice: ' : '') + title } };
+    }));
+  }, [setDecisions, setNodes]);
+
   const load = useCallback(async () => {
     const { data: decisions } = await supabase
       .from('decisions')
@@ -103,7 +114,7 @@ function ProjectCanvasInner() {
       data: { edgeColor: edgeColorFor(l.kind), pattern: 'solid', arrowStart: false, arrowEnd: true },
       markerEnd: { type: MarkerType.ArrowClosed }
     }) as any));
-  }, [projectId, editingId]);
+  }, [projectId, editingId, onRename]);
 
   useEffect(() => { load(); }, [load]);
 
