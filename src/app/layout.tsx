@@ -1,23 +1,23 @@
+import type { Metadata } from 'next'
 import './globals.css'
-import { Inter, Sora } from 'next/font/google'
-import Nav from '@/components/Nav'
-import Footer from '@/components/Footer'
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
-const sora = Sora({ subsets: ['latin'], variable: '--font-sora' })
-
-export const metadata = {
+export const metadata: Metadata = {
   title: 'Decision Thread Labs',
-  description: 'Map, accelerate, and govern decisions across your value stream.',
+  description: 'Map decisions, information flow, and opportunities.'
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} ${sora.variable} min-h-screen flex flex-col`}>
-        <Nav />
-        <main className="flex-1">{children}</main>
-        <Footer />
+      <head>
+        {/* Load Material Symbols for icon buttons */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
+        />
+      </head>
+      <body className="bg-dtl-ow text-slate-800 antialiased">
+        {children}
       </body>
     </html>
   )
