@@ -52,19 +52,21 @@ export default memo(function StickyNode({ id, data, selected }: NodeProps<Data>)
 
   return (
     <div
-      className={\`relative rounded-xl border shadow \${selected ? 'sticky-selected' : 'shadow-sm'}\`}
+      className={`relative rounded-xl border shadow ${selected ? 'sticky-selected' : 'shadow-sm'}`}
       style={{
         width: 140, height: 140, background: data.bg, color: data.textColor,
         borderColor: 'rgba(0,0,0,0.08)'
       }}
       onDoubleClick={startEdit}
     >
+      {/* folded corner */}
       <div style={{
         position:'absolute', right:0, bottom:0, width: 28, height: 28,
         clipPath: 'polygon(100% 0, 0% 100%, 100% 100%)',
         background: fold
       }} />
 
+      {/* Title */}
       {!editing ? (
         <div className="p-3 text-sm leading-snug">{title}</div>
       ) : (
@@ -78,6 +80,7 @@ export default memo(function StickyNode({ id, data, selected }: NodeProps<Data>)
         />
       )}
 
+      {/* Handles: center of each side */}
       <Handle id="t-src" type="source" position={Position.Top} style={{ width: 10, height: 10, background: '#5A6C80' }} />
       <Handle id="t-tgt" type="target" position={Position.Top} style={{ width: 10, height: 10, background: '#5A6C80' }} />
 
