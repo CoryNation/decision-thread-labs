@@ -1,7 +1,7 @@
 'use client';
 
-import clsx from 'clsx';
 import { Handle, Position } from 'reactflow';
+import clsx from 'clsx';
 
 type Props = {
   id: string;
@@ -9,58 +9,57 @@ type Props = {
     label: string;
     bg: string;
     textColor: string;
-    fold: string; // darker shade for the fold triangle
+    fold: string;
+    isEditing?: boolean;
+    onRename?: (id: string, title: string) => void;
   };
   selected?: boolean;
 };
 
-const CORNER = 16;
+export default function StickyNode({ id, data, selected }: Props) {
+  const { label, bg, textColor, fold } = data;
 
-export default function StickyNode({ data, selected }: Props) {
   return (
-    <div className={clsx('relative', selected && 'ring-2 ring-teal-400 rounded-xl')}>
-      {/* Base square with the bottom-right corner clipped out */}
+    <div
+      className={clsx(
+        'relative rounded-lg border shadow-sm',
+        selected ? 'ring-2 ring-teal-500' : 'border-slate-300'
+      )}
+      style={{ width: 140, height: 140, background: bg, color: textColor }}
+    >
+      {/* cut corner */}
       <div
-        className="rounded-xl border shadow-sm"
+        className="absolute right-0 bottom-0"
         style={{
-          width: 140,
-          height: 140,
-          background: data.bg,
-          color: data.textColor,
-          clipPath: `polygon(0 0, 100% 0, 100% calc(100% - ${CORNER}px), calc(100% - ${CORNER}px) 100%, 0 100%)`,
+          width: 28,
+          height: 28,
+          background: 'transparent',
+          clipPath: 'polygon(0 0, 100% 0, 100% 100%)',
+        }}
+      />
+      {/* folded flap */}
+      <div
+        className="absolute right-0 bottom-0"
+        style={{
+          width: 28,
+          height: 28,
+          background: fold,
+          clipPath: 'polygon(0 0, 100% 0, 0 100%)',
         }}
       />
 
-      {/* Fold triangle that mirrors the missing corner */}
-      <div
-        className="absolute"
-        style={{
-          right: 0,
-          bottom: 0,
-          width: CORNER,
-          height: CORNER,
-          background: data.fold,
-          clipPath: 'polygon(100% 0, 0 100%, 100% 100%)',
-          borderBottomRightRadius: 10,
-        }}
-      />
+      <div className="px-3 pt-3 text-sm font-medium leading-snug line-clamp-3">{label}</div>
 
-      {/* Label */}
-      <div className="absolute inset-0 p-3 text-sm font-medium pointer-events-none">
-        {data.label}
-      </div>
+      {/* 4 side handles (midpoints) */}
+      <Handle id="t-src" type="source" position={Position.Top} className="!w-2 !h-2" />
+      <Handle id="b-src" type="source" position={Position.Bottom} className="!w-2 !h-2" />
+      <Handle id="l-src" type="source" position={Position.Left} className="!w-2 !h-2" />
+      <Handle id="r-src" type="source" position={Position.Right} className="!w-2 !h-2" />
 
-      {/* Handles (targets) */}
-      <Handle id="t-tgt" type="target" position={Position.Top} />
-      <Handle id="r-tgt" type="target" position={Position.Right} />
-      <Handle id="b-tgt" type="target" position={Position.Bottom} />
-      <Handle id="l-tgt" type="target" position={Position.Left} />
-
-      {/* Handles (sources) */}
-      <Handle id="t-src" type="source" position={Position.Top} />
-      <Handle id="r-src" type="source" position={Position.Right} />
-      <Handle id="b-src" type="source" position={Position.Bottom} />
-      <Handle id="l-src" type="source" position={Position.Left} />
+      <Handle id="t-tgt" type="target" position={Position.Top} className="!w-2 !h-2" />
+      <Handle id="b-tgt" type="target" position={Position.Bottom} className="!w-2 !h-2" />
+      <Handle id="l-tgt" type="target" position={Position.Left} className="!w-2 !h-2" />
+      <Handle id="r-tgt" type="target" position={Position.Right} className="!w-2 !h-2" />
     </div>
   );
 }
