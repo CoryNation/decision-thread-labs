@@ -1,89 +1,37 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@200..700');
 
-/* Brand tokens */
-:root{
-  --dtl-navy:#1A2E49;
-  --dtl-teal:#20B2AA;
-  --dtl-ow:#F5F7FA;
-  --dtl-charcoal:#5A6C80;
-  --canvas-bg:#E6DECB; /* canvas paper color for corner cut */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  line-height: 1;
 }
 
-@layer utilities{
-  .text-dtl-navy{color:var(--dtl-navy)}
-  .bg-dtl-navy{background-color:var(--dtl-navy)}
-  .bg-dtl-teal{background-color:var(--dtl-teal)}
-  .bg-dtl-ow{background-color:var(--dtl-ow)}
-  .border-dtl-charcoal{border-color:var(--dtl-charcoal)}
+/* Panel (SIPOC + Edge settings) */
+.panel {
+  @apply rounded-2xl border bg-white shadow-xl flex flex-col;
+}
+.panel-header {
+  @apply sticky top-0 z-10 flex items-center justify-between px-3 py-3 border-b bg-white;
+}
+.panel-body {
+  @apply flex-1 overflow-y-auto px-4 py-4;
+}
+.fld-label {
+  @apply block text-[11px] font-medium text-slate-600 mb-1;
+}
+.fld-input {
+  @apply w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400;
+}
+.section-title {
+  @apply text-xs font-semibold text-slate-700 mt-4 mb-2;
 }
 
-@layer components{
-  .btn{
-    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 h-10 text-sm font-medium transition;
-    @apply border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
-  }
-  .btn-primary{ @apply border-transparent bg-dtl-navy text-white hover:opacity-90; }
-  .btn-teal{ @apply border-transparent bg-dtl-teal text-white hover:opacity-90; }
-  .btn-danger{ @apply border-red-300 text-red-600 bg-white hover:bg-red-50; }
+/* FAB buttons */
+.fab { @apply h-14 w-14 rounded-2xl flex items-center justify-center shadow-sm; }
+.fab-primary { @apply bg-teal-500 text-white; }
+.fab-danger { @apply bg-white border border-red-500 text-red-500; }
+.fab-neutral { @apply bg-white border border-slate-300 text-slate-500; }
 
-  .icon{
-    font-family:'Material Symbols Rounded';
-    font-size:24px; line-height:1; display:inline-block; -webkit-font-smoothing:antialiased;
-  }
-
-  .card{ @apply rounded-xl border border-slate-200 bg-white shadow-sm; }
-  .card-pad{ @apply p-4 md:p-6; }
-
-  .form-label{ @apply block text-sm font-semibold text-slate-700 mb-1; }
-  .form-help{ @apply text-xs text-slate-500 mt-1; }
-  .input{ @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-dtl-teal/40; }
-  .checkbox{ @apply h-4 w-4 rounded border-slate-300 text-dtl-teal focus:ring-dtl-teal/40; }
-
-  /* STICKY NOTE: folded corner (cut + fold) */
-  .sticky-card{
-    position:relative;
-    border-radius:0.75rem;
-    border:1px solid rgba(2,6,23,.08);
-    background:var(--note-bg,#FFF7B3);
-    color:var(--note-fg,#1f2937);
-    box-shadow:0 1px 2px rgba(0,0,0,.06);
-  }
-  /* “Cut” triangle (same color as canvas) */
-  .sticky-card::before{
-    content:'';
-    position:absolute; right:0; bottom:0;
-    width:0; height:0;
-    border-left:18px solid transparent;
-    border-top:18px solid var(--canvas-bg);
-  }
-  /* Folded flap triangle (darker hue) laid on top of the cut */
-  .sticky-card::after{
-    content:'';
-    position:absolute; right:0; bottom:0;
-    width:0; height:0;
-    border-left:18px solid transparent;
-    border-top:18px solid var(--note-fold, rgba(0,0,0,.16));
-    transform: translate(-1.5px,-1.5px);
-    filter:saturate(0.95);
-  }
-  .sticky-selected{
-    outline:2px solid var(--dtl-teal);
-    box-shadow:0 0 0 4px rgba(32,178,170,.16);
-  }
-
-  .tool-tile{
-    @apply flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm hover:shadow cursor-grab active:cursor-grabbing;
-  }
-}
-
-/* React Flow handle visuals */
-.react-flow__handle{
-  width:12px; height:12px; background:#475569; border:2px solid #fff; box-shadow:0 1px 2px rgba(0,0,0,.2);
-}
-.react-flow__handle-connecting,
-.react-flow__handle-valid{
-  background: var(--dtl-teal) !important;
-  box-shadow:0 0 0 6px rgba(32,178,170,.22);
+/* Tools */
+.tool-tile {
+  @apply relative flex flex-col items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-2 shadow-sm hover:bg-slate-50;
 }
