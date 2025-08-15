@@ -1,75 +1,109 @@
 'use client';
-import React from 'react';
-import type { Decision, Kind, Link } from '@/types/canvas';
 
-type View = 'process' | 'information' | 'opportunities';
+type Props = {
+  view: 'process' | 'information' | 'opportunities';
+  setView: (v: Props['view']) => void;
+};
 
-export default function CanvasToolbar({
-  view,
-  setView
+function ToolTile({
+  label,
+  onDragStart,
+  kind,
 }: {
-  view: View;
-  setView: (v: View) => void;
+  label: string;
+  kind: 'decision' | 'data' | 'opportunity' | 'choice';
+  onDragStart: (e: React.DragEvent, kind: string) => void;
 }) {
-  const onDragStart = (e: React.DragEvent, kind: 'decision' | 'data' | 'opportunity' | 'choice') => {
-    e.dataTransfer.setData('application/dtl-kind', kind);
+  const size = 56;
+
+  if (kind === 'choice') {
+    // diamond preview
+    return (
+      <button
+        className="tool-tile"
+        draggable
+        onDragStart={(e) => onDragStart(e, 'choice')}
+        title="Choice"
+      >
+        <div className="relative" style={{ width: size, height: size }}>
+          <div
+            className="absolute inset-0 m-auto rounded-md border border-slate-300 shadow-sm bg-[#F6E7B2]"
+            style={{ transform: 'rotate(45deg)' }}
+          />
+        </div>
+        <div className="text-xs">Choice</div>
+      </button>
+    );
+  }
+
+  const bg =
+    kind === 'data' ? '#DCFCE7' : kind === 'opportunity' ? '#CDE3FF' : '#FFF7B3';
+  const fold =
+    kind === 'data'
+      ? 'rgba(31,122,31,.22)'
+      : kind === 'opportunity'
+      ? 'rgba(30,64,175,.18)'
+      : 'rgba(0,0,0,.14)';
+
+  return (
+    <button
+      className="tool-tile"
+      draggable
+      onDragStart={(e) => onDragStart(e, kind)}
+      title={label}
+    >
+      <div
+        className="relative rounded-md border border-slate-300 shadow-sm"
+        style={{
+          width: size,
+          height: size,
+          background: bg,
+          clipPath: 'polygon(0 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%)',
+        }}
+      />
+      <div
+        className="absolute"
+        style={{
+          width: 12,
+          height: 12,
+          right: 6,
+          bottom: 18,
+          background: fold,
+          clipPath: 'polygon(100% 0,0 100%,100% 100%)',
+          borderBottomRightRadius: 4,
+        }}
+      />
+      <div className="text-xs">{label}</div>
+    </button>
+  );
+}
+
+export default function CanvasToolbar({ view, setView }: Props) {
+  const onDragStart = (e: React.DragEvent, kind: string) => {
+    e.dataTransfer.setData('application/reactflow', kind);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   return (
-    <div className="absolute left-4 top-4 z-10 w-64 rounded-xl bg-white/95 shadow-lg ring-1 ring-slate-200">
-      <div className="border-b px-3 py-2">
-        <label className="block text-xs font-semibold text-slate-500 mb-1">View</label>
+    <div className="absolute left-3 top-3 z-20">
+      <div className="rounded-xl bg-white border shadow p-3 w-[220px]">
+        <div className="mb-2 text-xs text-slate-500">View</div>
         <select
           value={view}
-          onChange={(e) => setView(e.target.value as View)}
-          className="w-full rounded-md border px-2 py-1 text-sm"
+          onChange={(e) => setView(e.target.value as Props['view'])}
+          className="w-full mb-3 rounded border border-slate-300 px-2 py-1 text-sm"
         >
           <option value="process">Decision Process</option>
           <option value="information">Information Flow</option>
           <option value="opportunities">Opportunities</option>
         </select>
-      </div>
 
-      <div className="p-3">
-        <div className="text-xs font-semibold text-slate-500 mb-2">Tools</div>
-
+        <div className="mb-2 text-xs text-slate-500">Tools</div>
         <div className="grid grid-cols-2 gap-3">
-          {/* Decision sticky */}
-          <div
-            className="cursor-move rounded-md border border-slate-300 bg-[#FFF7B3] p-2 text-center text-[11px] shadow-sm"
-            draggable
-            onDragStart={(e) => onDragStart(e, 'decision')}
-          >
-            Decision
-          </div>
-
-          {/* Data sticky (forest green family) */}
-          <div
-            className="cursor-move rounded-md border border-slate-300 bg-[#DCFCE7] p-2 text-center text-[11px] shadow-sm"
-            draggable
-            onDragStart={(e) => onDragStart(e, 'data')}
-          >
-            Data
-          </div>
-
-          {/* Opportunity sticky (blue) */}
-          <div
-            className="cursor-move rounded-md border border-slate-300 bg-[#CDE3FF] p-2 text-center text-[11px] shadow-sm"
-            draggable
-            onDragStart={(e) => onDragStart(e, 'opportunity')}
-          >
-            Opportunity
-          </div>
-
-          {/* Choice diamond */}
-          <div
-            className="cursor-move rounded-md border border-slate-300 bg-[#F6E7B2] p-2 text-center text-[11px] shadow-sm"
-            draggable
-            onDragStart={(e) => onDragStart(e, 'choice')}
-          >
-            Choice
-          </div>
+          <ToolTile label="Decision" kind="decision" onDragStart={onDragStart} />
+          <ToolTile label="Data" kind="data" onDragStart={onDragStart} />
+          <ToolTile label="Opportunity" kind="opportunity" onDragStart={onDragStart} />
+          <ToolTile label="Choice" kind="choice" onDragStart={onDragStart} />
         </div>
       </div>
     </div>
