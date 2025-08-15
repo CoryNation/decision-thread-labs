@@ -196,7 +196,7 @@ function Inner() {
       const p = screenToFlowPosition({ x: (event as MouseEvent).clientX - bounds.left, y: (event as MouseEvent).clientY - bounds.top });
 
       const src = decisions.find(d => d.id === connectingNodeId.current);
-      const newNode = await addNodeAt({ x: p.x - NODE_SIZE/2, y: p.y - NODE_SIZE/2 }, (src?.kind || 'decision') as K);
+      const newNode = await addNodeAt({ x: p.x - NODE_SIZE/2, y: p.y - NODE_SIZE/2 }, (src?.kind || 'decision') as Kind);
 
       if (newNode) {
         await onConnect({
