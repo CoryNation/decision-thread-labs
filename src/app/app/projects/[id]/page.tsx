@@ -1,6 +1,7 @@
 'use client';
 
-import type { Decision, Link, Kind } from '@/types/canvas';
+// at the top
+import type { Decision, Kind, Link, RFNode, RFEdge } from '@/types/canvas';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
@@ -44,8 +45,8 @@ function Inner() {
   const [view, setView] = useState<'process' | 'information' | 'opportunities'>('process');
 
   const [decisions, setDecisions] = useState<Decision[]>([]);
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
+const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
   const [selected, setSelected] = useState<Decision | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -90,20 +91,20 @@ function Inner() {
 
     setDecisions(ds);
 
-    setNodes(
-      ds.map((d) => ({
-        id: d.id,
-        type: (d.kind || 'decision') as Kind,
-        draggable: true,
-        position: { x: Number(d.x) || 100, y: Number(d.y) || 100 },
-        data: {
-          label: (d.kind === 'choice' ? 'Choice: ' : '') + (d.title || 'New item'),
-          onRename,
-          isEditing: editingId === d.id,
-          ...colorFor((d.kind || 'decision') as Kind),
-        },
-      }))
-    );
+setNodes(
+  ds.map((d): RFNode => ({
+    id: d.id,
+    type: (d.kind || 'decision') as Kind,
+    draggable: true,
+    position: { x: Number(d.x) || 100, y: Number(d.y) || 100 },
+    data: {
+      label: (d.kind === 'choice' ? 'Choice: ' : '') + (d.title || 'Note'),
+      onRename,
+      isEditing: editingId === d.id,
+      ...colorForKind((d.kind || 'decision') as Kind),
+    },
+  }))
+);
 
     setEdges(
       ls.map((l) => ({
