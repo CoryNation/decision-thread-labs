@@ -16,7 +16,7 @@ import EdgeInspector from '@/components/EdgeInspector';
 
 type K = 'decision'|'data'|'opportunity'|'gateway';
 type Decision = { id:string; project_id:string; kind:K; title:string; statement:string|null; x:number|null; y:number|null; queue_time_min:number|null; action_time_min:number|null; };
-type Link = { id:string; from_id:string; to_id:string; kind:string };
+type Link = { id:string; from_id:string; to_id:string; kind:string; source_handle?:string|null; target_handle?:string|null; curve?:string|null; pattern?:string|null; arrow_start?:boolean|null; arrow_end?:boolean|null };
 
 const nodeTypes = { decision: StickyNode, data: StickyNode, opportunity: StickyNode, gateway: StickyNode };
 
@@ -40,10 +40,10 @@ function ProjectCanvasInner() {
   const { screenToFlowPosition } = useReactFlow();
 
   const colorForKind = (k: K) => {
-    if (k === 'data') return { bg: '#DCFCE7', textColor:'#1F7A1F' };
-    if (k === 'opportunity') return { bg: '#CDE3FF', textColor:'#1f2937' };
-    if (k === 'decision') return { bg: '#FFF7B3', textColor:'#1f2937' };
-    return { bg: '#F6E7B2', textColor:'#1f2937' };
+    if (k === 'data') return { bg: '#DCFCE7', textColor:'#1F7A1F', fold:'rgba(31,122,31,.22)' };
+    if (k === 'opportunity') return { bg: '#CDE3FF', textColor:'#1f2937', fold:'rgba(30,64,175,.18)' };
+    if (k === 'decision') return { bg: '#FFF7B3', textColor:'#1f2937', fold:'rgba(0,0,0,.14)' };
+    return { bg: '#F6E7B2', textColor:'#1f2937', fold:'rgba(0,0,0,.14)' };
   };
   const edgeColorFor = (k: string) => (k === 'data' ? '#228B22' : '#5A6C80');
 
@@ -85,10 +85,20 @@ function ProjectCanvasInner() {
       id: l.id,
       source: l.from_id,
       target: l.to_id,
+      sourceHandle: l.source_handle || undefined,
+      targetHandle: l.target_handle || undefined,
       updatable: true,
-      type: 'straight',
-      data: { edgeColor: edgeColorFor(l.kind), pattern: 'solid', arrowStart: false, arrowEnd: true },
-      markerEnd: { type: MarkerType.ArrowClosed }
+      // default to right-angles for process mapping look
+      type: (l.curve as any) || 'step',
+      data: {
+        edgeColor: edgeColorFor(l.kind),
+        pattern: l.pattern || 'solid',
+        arrowStart: !!l.arrow_start,
+        arrowEnd: l.arrow_end !== false, // default true
+      },
+      markerStart: l.arrow_start ? { type: MarkerType.ArrowClosed } : undefined,
+      markerEnd: l.arrow_end !== false ? { type: MarkerType.ArrowClosed } : undefined,
+      style: l.pattern==='dotted' ? { strokeDasharray:'2 6' } : l.pattern==='dashed' ? { strokeDasharray:'8 6' } : undefined
     }) as any));
   }, [projectId, editingId, onRename]);
 
@@ -123,6 +133,7 @@ function ProjectCanvasInner() {
     const type = event.dataTransfer.getData('application/reactflow') as K;
     if (!type || !flowWrapper.current) return;
     const bounds = flowWrapper.current.getBoundingClientRect();
+    // drop exactly where the pointer is
     const p = screenToFlowPosition({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
     const position = { x: p.x - NODE_SIZE/2, y: p.y - NODE_SIZE/2 };
     addNodeAt(position, type);
@@ -133,13 +144,22 @@ function ProjectCanvasInner() {
     const src = decisions.find(d => d.id === c.source);
     const tgt = decisions.find(d => d.id === c.target);
     const kind = (src?.kind === 'data' || tgt?.kind === 'data') ? 'data' : 'precedes';
+
     const { data } = await supabase.from('decision_links').insert({
-      project_id: projectId, from_id: c.source, to_id: c.target, kind
+      project_id: projectId, from_id: c.source, to_id: c.target,
+      kind, source_handle: c.sourceHandle || null, target_handle: c.targetHandle || null,
+      curve: 'step', pattern: 'solid', arrow_end: true, arrow_start: false
     }).select('*').single();
+
     if (data) {
       setEdges((eds: any) => addEdge({
-        id: data.id, source: data.from_id, target: data.to_id, type: 'straight',
+        id: data.id,
+        source: data.from_id,
+        target: data.to_id,
+        sourceHandle: data.source_handle || undefined,
+        targetHandle: data.target_handle || undefined,
         updatable: true,
+        type: 'step',
         data: { edgeColor: edgeColorFor(kind), pattern: 'solid', arrowStart: false, arrowEnd: true },
         markerEnd: { type: MarkerType.ArrowClosed }
       }, eds) as any);
@@ -159,7 +179,7 @@ function ProjectCanvasInner() {
       const kindOfSource = decisions.find(d => d.id === connectingNodeId.current)?.kind || 'decision';
       const newNode = await addNodeAt({ x: p.x - NODE_SIZE/2, y: p.y - NODE_SIZE/2 }, kindOfSource);
       if (newNode) {
-        await onConnect({ source: connectingNodeId.current!, sourceHandle: null, target: newNode.id, targetHandle: null });
+        await onConnect({ source: connectingNodeId.current!, target: newNode.id, sourceHandle: null, targetHandle: null });
         setEditingId(newNode.id);
       }
     }
@@ -178,15 +198,21 @@ function ProjectCanvasInner() {
     setSelected(null); setSelectedEdge(edge);
   }, []);
   const onEdgeUpdate = useCallback(async (oldEdge: Edge, connection: Connection) => {
-    setEdges((eds: any) => eds.map((e: any) => e.id === oldEdge.id ? { ...e, source: connection.source, target: connection.target } : e));
-    await supabase.from('decision_links').update({ from_id: connection.source, to_id: connection.target }).eq('id', (oldEdge as any).id);
+    setEdges((eds: any) => eds.map((e: any) => e.id === oldEdge.id ? {
+      ...e, source: connection.source, target: connection.target,
+      sourceHandle: connection.sourceHandle, targetHandle: connection.targetHandle
+    } : e));
+    await supabase.from('decision_links').update({
+      from_id: connection.source, to_id: connection.target,
+      source_handle: connection.sourceHandle || null, target_handle: connection.targetHandle || null
+    }).eq('id', (oldEdge as any).id);
   }, []);
 
   async function handleTabCreate(sourceId: string) {
     const src = decisions.find(d => d.id === sourceId); if (!src) return;
     const newPos = { x: (src.x || 0) + NODE_SIZE + 48, y: src.y || 0 };
     const node = await addNodeAt(newPos, (src.kind as K), undefined);
-    if (node) { await onConnect({ source: sourceId, sourceHandle: null, target: node.id, targetHandle: null }); setEditingId(node.id); }
+    if (node) { await onConnect({ source: sourceId, target: node.id, sourceHandle: null, targetHandle: null }); setEditingId(node.id); }
   }
 
   const filteredNodes = useMemo(() => nodes.map((n: any) => {
@@ -213,7 +239,7 @@ function ProjectCanvasInner() {
   }, [decisions, view]);
 
   return (
-    <div className="relative m-4 rounded-2xl border" style={{ backgroundColor: '#E6DECB', overflow: 'hidden' }}>
+    <div className="relative m-4 rounded-2xl border bg-[#E6DECB] overflow-hidden">
       <CanvasToolbar view={view} setView={setView} />
 
       <div ref={flowWrapper} style={{ height: '80vh', overflow: 'hidden' }}>
@@ -221,7 +247,7 @@ function ProjectCanvasInner() {
           nodes={filteredNodes}
           edges={filteredEdges}
           nodeTypes={nodeTypes}
-          defaultEdgeOptions={{ updatable: true }}
+          defaultEdgeOptions={{ updatable: true, type:'step' }}
           connectionMode={ConnectionMode.Loose}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
@@ -278,10 +304,11 @@ function ProjectCanvasInner() {
           onChange={(upd) => {
             setEdges((eds: any) => eds.map((e: any) => {
               if (e.id !== selectedEdge.id) return e;
+              const type = upd.type || e.type;
               const mStart = upd.data?.arrowStart ? { type: MarkerType.ArrowClosed } : undefined;
               const mEnd = upd.data?.arrowEnd ? { type: MarkerType.ArrowClosed } : undefined;
               const dash = upd.data?.pattern === 'dotted' ? '2 6' : upd.data?.pattern === 'dashed' ? '8 6' : undefined;
-              return { ...e, data: { ...(e.data||{}), ...(upd.data||{}) }, markerStart: mStart, markerEnd: mEnd, style: { ...(e.style||{}), strokeDasharray: dash } };
+              return { ...e, type, data: { ...(e.data||{}), ...(upd.data||{}) }, markerStart: mStart, markerEnd: mEnd, style: { ...(e.style||{}), strokeDasharray: dash } };
             }));
           }}
         />
