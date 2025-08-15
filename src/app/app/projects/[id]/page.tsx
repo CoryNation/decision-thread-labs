@@ -16,32 +16,6 @@ import StickyNode from '@/components/nodes/StickyNode';
 import DiamondNode from '@/components/nodes/DiamondNode';
 import EdgeInspector from '@/components/EdgeInspector';
 
-// Types inlined here to avoid external imports mismatch
-type K = 'decision' | 'data' | 'opportunity' | 'choice';
-type Decision = {
-  id: string;
-  project_id: string;
-  kind: K;
-  title: string;
-  statement: string | null;
-  x: number | null;
-  y: number | null;
-  queue_time_min: number | null;
-  action_time_min: number | null;
-};
-type Link = {
-  id: string;
-  project_id: string;
-  from_id: string;
-  to_id: string;
-  kind: string;
-  source_handle?: string | null;
-  target_handle?: string | null;
-  curve?: string | null;
-  pattern?: string | null;
-  arrow_start?: boolean | null;
-  arrow_end?: boolean | null;
-};
 
 const nodeTypes = {
   decision: StickyNode,
@@ -72,7 +46,7 @@ function Inner() {
 
   const { screenToFlowPosition } = useReactFlow();
 
-  const colorForKind = (k: K) => {
+  const colorForKind = (k: Kind) => {
     if (k === 'data') return { bg: '#DCFCE7', textColor:'#1F7A1F', fold:'rgba(31,122,31,.22)' };
     if (k === 'opportunity') return { bg: '#CDE3FF', textColor:'#1f2937', fold:'rgba(30,64,175,.18)' };
     if (k === 'decision') return { bg: '#FFF7B3', textColor:'#1f2937', fold:'rgba(0,0,0,.14)' };
@@ -102,7 +76,7 @@ function Inner() {
     setDecisions(ds);
     setNodes(ds.map((d) => ({
       id: d.id,
-      type: (d.kind || 'decision') as K,
+      type: (d.kind || 'decision') as Kind,
       draggable: true,
       position: { x: Number(d.x) || 100, y: Number(d.y) || 100 },
       data: {
@@ -110,7 +84,7 @@ function Inner() {
         onRename,
         onTabCreate: handleTabCreate,
         isEditing: editingId === d.id,
-        ...colorForKind((d.kind || 'decision') as K)
+        ...colorForKind((d.kind || 'decision') as Kind)
       }
     })));
 
