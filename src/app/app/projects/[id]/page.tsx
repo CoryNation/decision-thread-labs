@@ -116,7 +116,7 @@ function Inner() {
 
   const NODE_SIZE = 140;
 
-  function addNodeAt(pos: {x:number;y:number}, kind: K, title?: string) {
+  function addNodeAt(pos: {x:number;y:number}, kind: Kind, title?: string) {
     return supabase.from('decisions').insert({
       project_id: projectId, kind, title: title || (kind==='data'?'Data':'New item'), x: pos.x, y: pos.y
     }).select('*').single().then(({ data }) => {
@@ -126,7 +126,7 @@ function Inner() {
         setNodes(prev => [...prev, {
           id: d.id, type: d.kind, draggable: true,
           position: {x:d.x||0,y:d.y||0},
-          data: { label: (d.kind==='choice'?'Choice: ':'') + d.title, onRename, onTabCreate: handleTabCreate, isEditing: false, ...colorForKind(d.kind as K) }
+          data: { label: (d.kind==='choice'?'Choice: ':'') + d.title, onRename, onTabCreate: handleTabCreate, isEditing: false, ...colorForKind(d.kind as Kind) }
         }]);
         return d;
       }
@@ -136,7 +136,7 @@ function Inner() {
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
-    const type = event.dataTransfer.getData('application/reactflow') as K;
+    const type = event.dataTransfer.getData('application/reactflow') as Kind;
     if (!type || !flowWrapper.current) return;
     const bounds = flowWrapper.current.getBoundingClientRect();
     const p = screenToFlowPosition({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
@@ -322,7 +322,7 @@ function Inner() {
           onSaved={(d: any) => {
             setDecisions(prev => prev.map((x: any) => x.id===d.id ? { ...x, ...d } : x));
             setNodes(prev => prev.map((n: any) => n.id===d.id ? {
-              ...n, type: d.kind, data:{ ...n.data, label: (d.kind==='choice'?'Choice: ':'') + d.title, ...colorForKind(d.kind as K) }
+              ...n, type: d.kind, data:{ ...n.data, label: (d.kind==='choice'?'Choice: ':'') + d.title, ...colorForKind(d.kind as Kind) }
             } : n));
           }}
           onDelete={(id) => {
