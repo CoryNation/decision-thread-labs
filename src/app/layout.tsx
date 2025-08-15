@@ -10,10 +10,16 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-[#F5F7FA] text-slate-800 antialiased">
+      <head>
+        {/* Google Material Symbols for icon buttons */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0"
+        />
+      </head>
+      <body className="bg-dtl-ow text-slate-800 antialiased">
         <Nav />
-        {/* leave space for the fixed navbar */}
-        <main className="pt-16">{children}</main>
+        <main className="pt-16 px-4 md:px-6 lg:px-8">{children}</main>
       </body>
     </html>
   );
