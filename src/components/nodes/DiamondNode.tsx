@@ -1,53 +1,54 @@
 'use client';
 
 import { Handle, Position } from 'reactflow';
+import clsx from 'clsx';
 
 type Props = {
+  id: string;
   data: {
     label: string;
-    bg?: string;
-    textColor?: string;
-    border?: string;
+    bg: string;
+    textColor: string;
+    fold?: string; // not used on diamond
   };
   selected?: boolean;
 };
 
 export default function DiamondNode({ data, selected }: Props) {
-  const size = 120;
-  const bg = data.bg ?? '#FFF7B3';
-  const stroke = data.border ?? '#94a3b8';
-  const color = data.textColor ?? '#1f2937';
+  const { label, bg, textColor } = data;
 
   return (
-    <div className={`relative ${selected ? 'ring-2 ring-teal-400 rounded-xl' : ''}`} style={{ width: size, height: size }}>
-      {/* Rotated square */}
+    <div className="relative" style={{ width: 140, height: 140 }}>
       <div
-        className="absolute inset-0 m-auto rounded-md border shadow-sm"
+        className={clsx(
+          'absolute inset-0 m-auto rounded-md border shadow-sm',
+          selected ? 'ring-2 ring-teal-500' : 'border-slate-300'
+        )}
         style={{
-          transform: 'rotate(45deg)',
+          width: 90,
+          height: 90,
           background: bg,
-          borderColor: stroke,
+          transform: 'translate(25px,25px) rotate(45deg)',
         }}
       />
-
-      {/* Label (counter-rotated) */}
+      {/* horizontal label overlaid */}
       <div
         className="absolute inset-0 flex items-center justify-center text-sm font-medium"
-        style={{ color, transform: 'rotate(-45deg)' }}
+        style={{ color: textColor }}
       >
-        {data.label}
+        {label}
       </div>
 
-      {/* 4-side handles on the bounding box so connection feels natural */}
-      <Handle id="t-tgt" type="target" position={Position.Top} />
-      <Handle id="r-tgt" type="target" position={Position.Right} />
-      <Handle id="b-tgt" type="target" position={Position.Bottom} />
-      <Handle id="l-tgt" type="target" position={Position.Left} />
+      {/* handles at cardinal points of the diamond */}
+      <Handle id="t-src" type="source" position={Position.Top} className="!w-2 !h-2" />
+      <Handle id="b-src" type="source" position={Position.Bottom} className="!w-2 !h-2" />
+      <Handle id="l-src" type="source" position={Position.Left} className="!w-2 !h-2" />
+      <Handle id="r-src" type="source" position={Position.Right} className="!w-2 !h-2" />
 
-      <Handle id="t-src" type="source" position={Position.Top} />
-      <Handle id="r-src" type="source" position={Position.Right} />
-      <Handle id="b-src" type="source" position={Position.Bottom} />
-      <Handle id="l-src" type="source" position={Position.Left} />
+      <Handle id="t-tgt" type="target" position={Position.Top} className="!w-2 !h-2" />
+      <Handle id="b-tgt" type="target" position={Position.Bottom} className="!w-2 !h-2" />
+      <Handle id="l-tgt" type="target" position={Position.Left} className="!w-2 !h-2" />
+      <Handle id="r-tgt" type="target" position={Position.Right} className="!w-2 !h-2" />
     </div>
   );
 }
