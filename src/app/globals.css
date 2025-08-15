@@ -2,15 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Brand palette used across the UI */
+/* Brand tokens */
 :root{
   --dtl-navy:#1A2E49;
   --dtl-teal:#20B2AA;
   --dtl-ow:#F5F7FA;
   --dtl-charcoal:#5A6C80;
+  --canvas-bg:#E6DECB; /* canvas paper color for corner cut */
 }
 
-/* Tailwind tokens */
 @layer utilities{
   .text-dtl-navy{color:var(--dtl-navy)}
   .bg-dtl-navy{background-color:var(--dtl-navy)}
@@ -19,88 +19,71 @@
   .border-dtl-charcoal{border-color:var(--dtl-charcoal)}
 }
 
-/* Generic buttons */
 @layer components{
   .btn{
     @apply inline-flex items-center justify-center gap-2 rounded-md px-4 h-10 text-sm font-medium transition;
     @apply border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
   }
-  .btn-primary{
-    @apply border-transparent bg-dtl-navy text-white hover:opacity-90;
-  }
-  .btn-teal{
-    @apply border-transparent bg-dtl-teal text-white hover:opacity-90;
-  }
-  .btn-danger{
-    @apply border-red-300 text-red-600 bg-white hover:bg-red-50;
-  }
+  .btn-primary{ @apply border-transparent bg-dtl-navy text-white hover:opacity-90; }
+  .btn-teal{ @apply border-transparent bg-dtl-teal text-white hover:opacity-90; }
+  .btn-danger{ @apply border-red-300 text-red-600 bg-white hover:bg-red-50; }
+
   .icon{
-    font-family: 'Material Symbols Rounded';
-    font-weight: normal;
-    font-style: normal;
-    font-size: 24px; /* do not change – MD spec */
-    line-height: 1;
-    letter-spacing: normal;
-    text-transform: none;
-    display: inline-block;
-    white-space: nowrap;
-    word-wrap: normal;
-    direction: ltr;
-    -webkit-font-feature-settings: 'liga';
-    -webkit-font-smoothing: antialiased;
+    font-family:'Material Symbols Rounded';
+    font-size:24px; line-height:1; display:inline-block; -webkit-font-smoothing:antialiased;
   }
 
-  .card{
-    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
-  }
-  .card-pad{
-    @apply p-4 md:p-6;
-  }
+  .card{ @apply rounded-xl border border-slate-200 bg-white shadow-sm; }
+  .card-pad{ @apply p-4 md:p-6; }
 
-  /* Form typography */
-  .form-label{
-    @apply block text-sm font-semibold text-slate-700 mb-1;
-  }
-  .form-help{
-    @apply text-xs text-slate-500 mt-1;
-  }
-  .input{
-    @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-dtl-teal/40;
-  }
-  .checkbox{
-    @apply h-4 w-4 rounded border-slate-300 text-dtl-teal focus:ring-dtl-teal/40;
-  }
+  .form-label{ @apply block text-sm font-semibold text-slate-700 mb-1; }
+  .form-help{ @apply text-xs text-slate-500 mt-1; }
+  .input{ @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-dtl-teal/40; }
+  .checkbox{ @apply h-4 w-4 rounded border-slate-300 text-dtl-teal focus:ring-dtl-teal/40; }
 
-  /* Sticky note with a real folded corner (cut corner + fold) */
+  /* STICKY NOTE: folded corner (cut + fold) */
   .sticky-card{
-    position: relative;
-    border-radius: 0.75rem;
-    box-shadow: 0 1px 2px rgba(0,0,0,.06);
-    border: 1px solid rgba(2,6,23,.08);
-    background: var(--note-bg, #FFF7B3);
-    color: var(--note-fg, #1f2937);
-    /* cut bottom-right corner */
-    -webkit-clip-path: polygon(0 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%);
-            clip-path: polygon(0 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%);
+    position:relative;
+    border-radius:0.75rem;
+    border:1px solid rgba(2,6,23,.08);
+    background:var(--note-bg,#FFF7B3);
+    color:var(--note-fg,#1f2937);
+    box-shadow:0 1px 2px rgba(0,0,0,.06);
   }
-  .sticky-card::after{
-    /* folded triangle */
+  /* “Cut” triangle (same color as canvas) */
+  .sticky-card::before{
     content:'';
-    position:absolute;
-    right:0; bottom:0;
-    width: 0; height: 0;
-    border-style: solid;
-    border-width: 0 0 18px 18px; /* bottom, left */
-    border-color: transparent transparent var(--note-fold, rgba(0,0,0,.12)) transparent;
-    filter: saturate(0.9);
+    position:absolute; right:0; bottom:0;
+    width:0; height:0;
+    border-left:18px solid transparent;
+    border-top:18px solid var(--canvas-bg);
+  }
+  /* Folded flap triangle (darker hue) laid on top of the cut */
+  .sticky-card::after{
+    content:'';
+    position:absolute; right:0; bottom:0;
+    width:0; height:0;
+    border-left:18px solid transparent;
+    border-top:18px solid var(--note-fold, rgba(0,0,0,.16));
+    transform: translate(-1.5px,-1.5px);
+    filter:saturate(0.95);
   }
   .sticky-selected{
-    outline: 2px solid var(--dtl-teal);
-    box-shadow: 0 0 0 4px rgba(32,178,170,.16);
+    outline:2px solid var(--dtl-teal);
+    box-shadow:0 0 0 4px rgba(32,178,170,.16);
   }
 
-  /* Tools panel compact sticky tiles */
   .tool-tile{
     @apply flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm hover:shadow cursor-grab active:cursor-grabbing;
   }
+}
+
+/* React Flow handle visuals */
+.react-flow__handle{
+  width:12px; height:12px; background:#475569; border:2px solid #fff; box-shadow:0 1px 2px rgba(0,0,0,.2);
+}
+.react-flow__handle-connecting,
+.react-flow__handle-valid{
+  background: var(--dtl-teal) !important;
+  box-shadow:0 0 0 6px rgba(32,178,170,.22);
 }
