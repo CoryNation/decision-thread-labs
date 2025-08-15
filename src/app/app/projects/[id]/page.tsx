@@ -21,7 +21,7 @@ const nodeTypes = {
   decision: StickyNode,
   data: StickyNode,
   opportunity: StickyNode,
-  choice: DiamondNode,            // 👈 diamond
+  choice: DiamondNode,
 } as const;
 
 export default function ProjectCanvasPage() {
@@ -57,8 +57,8 @@ function Inner() {
   const onRename = useCallback(async (id: string, title: string) => {
     await supabase.from('decisions').update({ title }).eq('id', id);
     setDecisions(prev => prev.map(d => d.id === id ? { ...d, title } : d));
-    setNodes(prev => prev.map((n: any) => n.id !== id ? n :
-      ({ ...n, data: { ...n.data, label: ((n.type as string)==='choice'?'Choice: ':'') + title } })
+    setNodes(prev => prev.map((n: any) =>
+      n.id !== id ? n : ({ ...n, data: { ...n.data, label: ((n.type as string)==='choice'?'Choice: ':'') + title } })
     ));
   }, [setDecisions, setNodes]);
 
@@ -126,7 +126,7 @@ function Inner() {
         setNodes(prev => [...prev, {
           id: d.id, type: d.kind, draggable: true,
           position: {x:d.x||0,y:d.y||0},
-          data: { label: (d.kind==='choice'?'Choice: ':'') + d.title, onRename, onTabCreate: handleTabCreate, isEditing: false, ...colorForKind(d.kind) }
+          data: { label: (d.kind==='choice'?'Choice: ':'') + d.title, onRename, onTabCreate: handleTabCreate, isEditing: false, ...colorForKind(d.kind as K) }
         }]);
         return d;
       }
@@ -321,7 +321,9 @@ function Inner() {
           onClose={() => setSelected(null)}
           onSaved={(d: any) => {
             setDecisions(prev => prev.map((x: any) => x.id===d.id ? { ...x, ...d } : x));
-            setNodes(prev => prev.map((n: any) => n.id===d.id ? { ...n, type: d.kind, data:{ ...n.data, label: (d.kind==='choice'?'Choice: ':'') + d.title, ...colorForKind(d.kind) } } : n));
+            setNodes(prev => prev.map((n: any) => n.id===d.id ? {
+              ...n, type: d.kind, data:{ ...n.data, label: (d.kind==='choice'?'Choice: ':'') + d.title, ...colorForKind(d.kind as K) }
+            } : n));
           }}
           onDelete={(id) => {
             setEdges(prev => prev.filter(e => e.source !== id && e.target !== id));
