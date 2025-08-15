@@ -12,21 +12,21 @@ import { supabase } from '@/lib/supabaseClient';
 import CanvasToolbar from '@/components/CanvasToolbar';
 import SipocInspector from '@/components/SipocInspector';
 import StickyNode from '@/components/nodes/StickyNode';
+import DiamondNode from '@/components/nodes/DiamondNode';
 import EdgeInspector from '@/components/EdgeInspector';
 
 type K = 'decision'|'data'|'opportunity'|'gateway';
 type Decision = { id:string; project_id:string; kind:K; title:string; statement:string|null; x:number|null; y:number|null; queue_time_min:number|null; action_time_min:number|null; };
 type Link = { id:string; from_id:string; to_id:string; kind:string; source_handle?:string|null; target_handle?:string|null; curve?:string|null; pattern?:string|null; arrow_start?:boolean|null; arrow_end?:boolean|null };
 
-const nodeTypes = { decision: StickyNode, data: StickyNode, opportunity: StickyNode, gateway: StickyNode };
+const nodeTypes = { decision: StickyNode, data: StickyNode, opportunity: StickyNode, gateway: DiamondNode };
 
 export default function ProjectCanvasPage() {
-  return <ReactFlowProvider><ProjectCanvasInner /></ReactFlowProvider>;
+  return <ReactFlowProvider><Inner /></ReactFlowProvider>;
 }
 
-function ProjectCanvasInner() {
-  const params = useParams();
-  const projectId = params.id as string;
+function Inner() {
+  const { id: projectId } = useParams() as { id: string };
   const [view, setView] = useState<'process'|'information'|'opportunities'>('process');
 
   const [decisions, setDecisions] = useState<Decision[]>([]);
@@ -35,8 +35,12 @@ function ProjectCanvasInner() {
   const [selected, setSelected] = useState<Decision | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<any>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+
   const flowWrapper = useRef<HTMLDivElement>(null);
   const connectingNodeId = useRef<string | null>(null);
+  const connectingFromHandle = useRef<string | null>(null);
+  const didConnectRef = useRef<boolean>(false);
+
   const { screenToFlowPosition } = useReactFlow();
 
   const colorForKind = (k: K) => {
@@ -88,13 +92,12 @@ function ProjectCanvasInner() {
       sourceHandle: l.source_handle || undefined,
       targetHandle: l.target_handle || undefined,
       updatable: true,
-      // default to right-angles for process mapping look
       type: (l.curve as any) || 'step',
       data: {
         edgeColor: edgeColorFor(l.kind),
         pattern: l.pattern || 'solid',
         arrowStart: !!l.arrow_start,
-        arrowEnd: l.arrow_end !== false, // default true
+        arrowEnd: l.arrow_end !== false,
       },
       markerStart: l.arrow_start ? { type: MarkerType.ArrowClosed } : undefined,
       markerEnd: l.arrow_end !== false ? { type: MarkerType.ArrowClosed } : undefined,
@@ -104,12 +107,12 @@ function ProjectCanvasInner() {
 
   useEffect(() => { load(); }, [load]);
 
-  const onDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
   }, []);
 
   const NODE_SIZE = 140;
+
   function addNodeAt(pos: {x:number;y:number}, kind: K, title?: string) {
     return supabase.from('decisions').insert({
       project_id: projectId, kind, title: title || (kind==='data'?'Data':'New item'), x: pos.x, y: pos.y
@@ -133,7 +136,6 @@ function ProjectCanvasInner() {
     const type = event.dataTransfer.getData('application/reactflow') as K;
     if (!type || !flowWrapper.current) return;
     const bounds = flowWrapper.current.getBoundingClientRect();
-    // drop exactly where the pointer is
     const p = screenToFlowPosition({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
     const position = { x: p.x - NODE_SIZE/2, y: p.y - NODE_SIZE/2 };
     addNodeAt(position, type);
@@ -141,6 +143,8 @@ function ProjectCanvasInner() {
 
   const onConnect: OnConnect = useCallback(async (c: Connection) => {
     if (!c.source || !c.target) return;
+    didConnectRef.current = true;  // tell onConnectEnd not to spawn a node
+
     const src = decisions.find(d => d.id === c.source);
     const tgt = decisions.find(d => d.id === c.target);
     const kind = (src?.kind === 'data' || tgt?.kind === 'data') ? 'data' : 'precedes';
@@ -153,38 +157,60 @@ function ProjectCanvasInner() {
 
     if (data) {
       setEdges((eds: any) => addEdge({
-        id: data.id,
-        source: data.from_id,
-        target: data.to_id,
+        id: data.id, source: data.from_id, target: data.to_id,
         sourceHandle: data.source_handle || undefined,
         targetHandle: data.target_handle || undefined,
-        updatable: true,
-        type: 'step',
-        data: { edgeColor: edgeColorFor(kind), pattern: 'solid', arrowStart: false, arrowEnd: true },
+        updatable: true, type: 'step',
+        data: { edgeColor: edgeColorFor(kind), pattern:'solid', arrowStart:false, arrowEnd:true },
         markerEnd: { type: MarkerType.ArrowClosed }
       }, eds) as any);
     }
   }, [projectId, decisions]);
 
-  const { screenToFlowPosition: s2f } = useReactFlow();
+  const oppositeTarget = (srcHandle?: string | null) => {
+    if (!srcHandle) return null;
+    if (srcHandle.startsWith('r')) return 'l-tgt';
+    if (srcHandle.startsWith('l')) return 'r-tgt';
+    if (srcHandle.startsWith('t')) return 'b-tgt';
+    if (srcHandle.startsWith('b')) return 't-tgt';
+    return null;
+  };
+
   const onConnectStart: OnConnectStart = useCallback((_e, params) => {
     connectingNodeId.current = params.nodeId || null;
+    connectingFromHandle.current = params.handleId || null; // remember which side
+    didConnectRef.current = false;
   }, []);
+
   const onConnectEnd: OnConnectEnd = useCallback(async (event) => {
+    // If a real connect already happened, do nothing
+    if (didConnectRef.current) { didConnectRef.current = false; return; }
+
     const target = event.target as HTMLElement;
     const isPane = target.classList.contains('react-flow__pane');
+
     if (isPane && flowWrapper.current && connectingNodeId.current) {
       const bounds = flowWrapper.current.getBoundingClientRect();
-      const p = s2f({ x: (event as MouseEvent).clientX - bounds.left, y: (event as MouseEvent).clientY - bounds.top });
-      const kindOfSource = decisions.find(d => d.id === connectingNodeId.current)?.kind || 'decision';
-      const newNode = await addNodeAt({ x: p.x - NODE_SIZE/2, y: p.y - NODE_SIZE/2 }, kindOfSource);
+      const p = screenToFlowPosition({ x: (event as MouseEvent).clientX - bounds.left, y: (event as MouseEvent).clientY - bounds.top });
+
+      const src = decisions.find(d => d.id === connectingNodeId.current);
+      const newNode = await addNodeAt({ x: p.x - NODE_SIZE/2, y: p.y - NODE_SIZE/2 }, (src?.kind || 'decision') as K);
+
       if (newNode) {
-        await onConnect({ source: connectingNodeId.current!, target: newNode.id, sourceHandle: null, targetHandle: null });
+        await onConnect({
+          source: connectingNodeId.current!,
+          target: newNode.id,
+          sourceHandle: connectingFromHandle.current || undefined,
+          targetHandle: oppositeTarget(connectingFromHandle.current) || undefined
+        });
         setEditingId(newNode.id);
       }
     }
+
     connectingNodeId.current = null;
-  }, [s2f, decisions, onConnect]);
+    connectingFromHandle.current = null;
+    didConnectRef.current = false;
+  }, [decisions, onConnect, screenToFlowPosition]);
 
   const onNodeDragStop = useCallback(async (_e: any, node: Node) => {
     await supabase.from('decisions').update({ x: node.position.x, y: node.position.y }).eq('id', node.id);
@@ -194,9 +220,11 @@ function ProjectCanvasInner() {
     const d = decisions.find((dd) => dd.id === n.id) || null;
     setSelectedEdge(null); setSelected(d);
   }, [decisions]);
+
   const onEdgeDoubleClick = useCallback((_e: any, edge: Edge) => {
     setSelected(null); setSelectedEdge(edge);
   }, []);
+
   const onEdgeUpdate = useCallback(async (oldEdge: Edge, connection: Connection) => {
     setEdges((eds: any) => eds.map((e: any) => e.id === oldEdge.id ? {
       ...e, source: connection.source, target: connection.target,
@@ -212,7 +240,10 @@ function ProjectCanvasInner() {
     const src = decisions.find(d => d.id === sourceId); if (!src) return;
     const newPos = { x: (src.x || 0) + NODE_SIZE + 48, y: src.y || 0 };
     const node = await addNodeAt(newPos, (src.kind as K), undefined);
-    if (node) { await onConnect({ source: sourceId, target: node.id, sourceHandle: null, targetHandle: null }); setEditingId(node.id); }
+    if (node) {
+      await onConnect({ source: sourceId, target: node.id, sourceHandle: 'r-src', targetHandle: 'l-tgt' });
+      setEditingId(node.id);
+    }
   }
 
   const filteredNodes = useMemo(() => nodes.map((n: any) => {
@@ -235,11 +266,11 @@ function ProjectCanvasInner() {
     });
     const q = visible.reduce((a, d) => a + (d.queue_time_min || 0), 0);
     const a = visible.reduce((a2, d) => a2 + (d.action_time_min || 0), 0);
-    const t = q + a; return { q, a, t };
+    return { q, a, t: q + a };
   }, [decisions, view]);
 
   return (
-    <div className="relative m-4 rounded-2xl border bg-[#E6DECB] overflow-hidden">
+    <div className="relative m-4 rounded-2xl border bg-[var(--canvas-bg)] overflow-hidden">
       <CanvasToolbar view={view} setView={setView} />
 
       <div ref={flowWrapper} style={{ height: '80vh', overflow: 'hidden' }}>
@@ -297,6 +328,7 @@ function ProjectCanvasInner() {
           }}
         />
       )}
+
       {selectedEdge && (
         <EdgeInspector
           edge={selectedEdge}
@@ -306,7 +338,7 @@ function ProjectCanvasInner() {
               if (e.id !== selectedEdge.id) return e;
               const type = upd.type || e.type;
               const mStart = upd.data?.arrowStart ? { type: MarkerType.ArrowClosed } : undefined;
-              const mEnd = upd.data?.arrowEnd ? { type: MarkerType.ArrowClosed } : undefined;
+              const mEnd   = upd.data?.arrowEnd   ? { type: MarkerType.ArrowClosed } : undefined;
               const dash = upd.data?.pattern === 'dotted' ? '2 6' : upd.data?.pattern === 'dashed' ? '8 6' : undefined;
               return { ...e, type, data: { ...(e.data||{}), ...(upd.data||{}) }, markerStart: mStart, markerEnd: mEnd, style: { ...(e.style||{}), strokeDasharray: dash } };
             }));
