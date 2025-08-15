@@ -1,5 +1,6 @@
 'use client';
 
+import type { Decision, Kind, Link } from '@/types/canvas';
 import { useEffect, useState } from 'react';
 
 export default function EdgeInspector({
