@@ -1,60 +1,81 @@
 'use client';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import clsx from 'clsx';
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
 
-const links = [
-  { href: '/', label: 'Home' },
-  { href: '/methodology', label: 'Methodology' },
-  { href: '/services', label: 'Services' },
-  { href: '/software', label: 'Software' },
-  { href: '/book', label: 'Book' },
-  { href: '/blog', label: 'Blog' },
-  { href: '/contact', label: 'Contact' },
-  { href: '/app', label: 'App' },
-];
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function Nav() {
   const pathname = usePathname();
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
 
   useEffect(() => {
-    const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUserEmail(session?.user?.email ?? null);
+    let mounted = true;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (mounted) setEmail(data.user?.email ?? null);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      mounted = false;
     };
-    load();
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserEmail(session?.user?.email ?? null);
-    });
-    return () => sub.subscription.unsubscribe();
   }, []);
 
-  async function signOut() { await supabase.auth.signOut(); }
+  const linkCls = (href: string) =>
+    `px-3 py-2 rounded-md text-sm ${
+      pathname === href ? 'text-dtl-teal font-semibold' : 'text-slate-700 hover:text-slate-900'
+    }`;
 
   return (
-    <nav className="w-full bg-white/80 backdrop-blur sticky top-0 z-50 border-b">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-6">
-        <Link href="/" className="font-bold text-xl text-dtl-navy">Decision Thread Labs</Link>
-        <div className="flex-1" />
-        <ul className="flex items-center gap-4 text-sm">
-          {links.map(l => (
-            <li key={l.href}>
-              <Link className={clsx("px-2 py-1 rounded-md hover:bg-dtl-ow",
-                pathname === l.href && "text-dtl-teal font-semibold")} href={l.href}>
-                {l.label}
+    <header className="fixed inset-x-0 top-0 z-50 bg-white/80 backdrop-blur border-b border-slate-200">
+      <nav className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+        <div className="flex items-center gap-6">
+          <Link href="/" className="text-lg font-semibold text-slate-900">
+            Decision Thread Labs
+          </Link>
+
+          <div className="hidden md:flex items-center gap-1">
+            <Link href="/" className={linkCls('/')}>Home</Link>
+            <Link href="/methodology" className={linkCls('/methodology')}>Methodology</Link>
+            <Link href="/services" className={linkCls('/services')}>Services</Link>
+            <Link href="/software" className={linkCls('/software')}>Software</Link>
+            <Link href="/book" className={linkCls('/book')}>Book</Link>
+            <Link href="/blog" className={linkCls('/blog')}>Blog</Link>
+            <Link href="/contact" className={linkCls('/contact')}>Contact</Link>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {email ? (
+            <>
+              <Link href="/app" className="px-3 py-2 text-sm rounded-md bg-dtl-navy text-white hover:opacity-90">
+                App
               </Link>
-            </li>
-          ))}
-          {!userEmail ? (
-            <li><Link className="btn btn-accent" href="/auth">Sign in</Link></li>
+              <button
+                onClick={async () => {
+                  await supabase.auth.signOut();
+                  location.href = '/';
+                }}
+                className="px-3 py-2 text-sm rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50"
+              >
+                Sign out
+              </button>
+            </>
           ) : (
-            <li><button className="btn btn-primary" onClick={signOut}>Sign out</button></li>
+            <>
+              <Link
+                href="/auth"
+                className="px-3 py-2 text-sm rounded-md bg-dtl-teal text-white hover:opacity-90"
+              >
+                Sign in
+              </Link>
+            </>
           )}
-        </ul>
-      </div>
-    </nav>
-  )
+        </div>
+      </nav>
+    </header>
+  );
 }
