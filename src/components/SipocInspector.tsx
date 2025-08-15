@@ -11,181 +11,161 @@ type Props = {
   onDelete: (id: string) => void;
 };
 
-type Decision = {
-  id: string; project_id: string; kind: 'decision'|'data'|'opportunity'|'choice';
-  title: string; statement: string | null;
-  supplier_who?: string|null;
-  supplier_storage?: string|null;
-  supplier_comm_email?: boolean|null;
-  supplier_comm_verbal?: boolean|null;
-  supplier_comm_form?: boolean|null;
-  supplier_comm_notification?: boolean|null;
-  supplier_comm_other?: boolean|null;
-  supplier_comm_other_text?: string|null;
+const KIND_OPTIONS: Kind[] = ['decision', 'data', 'opportunity', 'choice'];
 
-  inputs_what?: string|null;
-  inputs_format?: string|null;
-  inputs_transformed?: boolean|null;
+export default function SipocInspector({ decision, onClose, onSaved, onDelete }: Props) {
+  // Local editable draft. Use optional chaining defaults so optional fields never break controlled inputs.
+  const [draft, setDraft] = useState<Decision>(decision);
 
-  process_desc?: string|null;
-  process_goal?: string|null;
-  process_people?: boolean|null;
+  useEffect(() => {
+    setDraft(decision);
+  }, [decision]);
 
-  outputs_what?: string|null;
-  outputs_format?: string|null;
+  const canSave = useMemo(() => {
+    // keep this simple for now; title is our minimum
+    return (draft.title ?? '').trim().length > 0;
+  }, [draft.title]);
 
-  customer_who?: string|null;
-  customer_comm?: string|null;
+  function update<K extends keyof Decision>(key: K, value: Decision[K]) {
+    setDraft((d) => ({ ...d, [key]: value }));
+  }
 
-  queue_time_min?: number|null;
-  action_time_min?: number|null;
-};
+  async function handleSave() {
+    const payload: Partial<Decision> = {
+      title: draft.title ?? '',
+      kind: (draft.kind ?? 'decision') as Kind,
+      statement: draft.statement ?? null,
+      queue_time_min: draft.queue_time_min ?? null,
+      action_time_min: draft.action_time_min ?? null,
+      // include any other SIPOC fields you’ve added; leaving them out keeps them unchanged
+    };
 
-export default function SipocInspector({
-  decision,
-  onClose,
-  onSaved,
-  onDelete,
-}: {
-  decision: Decision;
-  onClose: () => void;
-  onSaved: (d: Decision) => void;
-  onDelete: (id: string) => void;
-}) {
-  // Local copy prevents the “single character” overwrite problem
-  const [form, setForm] = useState<Decision>(decision);
-  useEffect(() => { setForm(decision); }, [decision?.id]);
+    const { data, error } = await supabase
+      .from('decisions')
+      .update(payload)
+      .eq('id', decision.id)
+      .select('*')
+      .single();
 
-  const update = (k: keyof Decision, v: any) => setForm(f => ({ ...f, [k]: v }));
+    if (error) {
+      console.error('Save failed', error);
+      return;
+    }
 
-  const save = async () => {
-    const { data } = await supabase.from('decisions').update(form).eq('id', form.id).select('*').single();
-    if (data) onSaved(data as Decision);
-  };
+    // Cast to Decision since our central type is flexible
+    onSaved(data as unknown as Decision);
+  }
 
-  const del = async () => {
-    await supabase.from('decision_links').delete().or(`from_id.eq.${form.id},to_id.eq.${form.id}`);
-    await supabase.from('decisions').delete().eq('id', form.id);
-    onDelete(form.id);
+  async function handleDelete() {
+    // delete links first to avoid FK issues if you have them
+    await supabase.from('decision_links').delete().or(`from_id.eq.${decision.id},to_id.eq.${decision.id}`);
+    await supabase.from('decisions').delete().eq('id', decision.id);
+    onDelete(decision.id);
     onClose();
-  };
-
-  const commOtherEnabled = !!form.supplier_comm_other;
+  }
 
   return (
-    <aside className="absolute right-4 top-4 bottom-4 w-[380px] card overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-white sticky top-0 z-10">
-        <h3 className="text-sm font-semibold text-slate-700">SIPOC Inspector</h3>
+    <aside
+      className="fixed right-0 top-0 h-screen w-[380px] bg-white border-l shadow-xl z-40 flex flex-col"
+      role="dialog"
+      aria-label="SIPOC Inspector"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Header with FAB-style actions */}
+      <div className="flex items-center justify-between px-3 py-3 border-b bg-white sticky top-0 z-10">
+        <h2 className="text-sm font-semibold text-slate-800">SIPOC Inspector</h2>
         <div className="flex items-center gap-2">
-          <button className="btn btn-teal !h-14 !w-14 rounded-full" onClick={save} title="Save">
-            <span className="icon">save</span>
+          {/* Save */}
+          <button
+            onClick={handleSave}
+            disabled={!canSave}
+            className="h-14 w-14 rounded-2xl flex items-center justify-center border border-transparent
+                       bg-[var(--dtl-primary,#20B2AA)] text-white shadow-sm disabled:opacity-50"
+            title="Save"
+          >
+            <span className="material-symbols-outlined text-[24px] leading-none">save</span>
           </button>
-          <button className="btn btn-danger !h-14 !w-14 rounded-full" onClick={del} title="Delete">
-            <span className="icon">delete</span>
+
+          {/* Delete */}
+          <button
+            onClick={handleDelete}
+            className="h-14 w-14 rounded-2xl flex items-center justify-center border border-red-500
+                       bg-white text-red-500 shadow-sm"
+            title="Delete"
+          >
+            <span className="material-symbols-outlined text-[24px] leading-none">delete</span>
           </button>
-          <button className="btn !h-14 !w-14 rounded-full" onClick={onClose} title="Close">
-            <span className="icon">close</span>
+
+          {/* Close */}
+          <button
+            onClick={onClose}
+            className="h-14 w-14 rounded-2xl flex items-center justify-center border border-slate-300
+                       bg-white text-slate-500 shadow-sm"
+            title="Close"
+          >
+            <span className="material-symbols-outlined text-[24px] leading-none">close</span>
           </button>
         </div>
       </div>
 
-      <div className="card-pad space-y-5 overflow-y-auto h-[calc(100%-64px)]">
-        <div>
-          <label className="form-label">Type</label>
-          <select
-            className="input"
-            value={form.kind}
-            onChange={(e) => update('kind', e.target.value as any)}
-          >
-            <option value="decision">Decision</option>
-            <option value="data">Data</option>
-            <option value="opportunity">Opportunity</option>
-            <option value="choice">Choice</option>
-          </select>
-        </div>
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        {/* Type */}
+        <label className="block text-xs font-medium text-slate-600 mb-1">Type</label>
+        <select
+          value={draft.kind ?? 'decision'}
+          onChange={(e) => update('kind', e.target.value as Kind)}
+          className="w-full mb-4 rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dtl-teal,#20B2AA)]"
+        >
+          {KIND_OPTIONS.map((k) => (
+            <option key={k} value={k}>
+              {k === 'choice' ? 'Choice' : k.charAt(0).toUpperCase() + k.slice(1)}
+            </option>
+          ))}
+        </select>
 
-        <div>
-          <label className="form-label">Title</label>
-          <input className="input" value={form.title || ''} onChange={(e)=>update('title', e.target.value)} />
-        </div>
+        {/* Title */}
+        <label className="block text-xs font-medium text-slate-600 mb-1">Title</label>
+        <input
+          value={draft.title ?? ''}
+          onChange={(e) => update('title', e.target.value)}
+          placeholder="Short title"
+          className="w-full mb-4 rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dtl-teal,#20B2AA)]"
+        />
 
-        {/* Supplier */}
-        <div className="pt-2">
-          <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Supplier</div>
-          <label className="form-label">Who supplies the information?</label>
-          <input className="input" value={form.supplier_who || ''} onChange={e=>update('supplier_who', e.target.value)} />
-
-          <label className="form-label mt-3">Where is the information stored?</label>
-          <input className="input" value={form.supplier_storage || ''} onChange={e=>update('supplier_storage', e.target.value)} />
-
-          <label className="form-label mt-3">How is it communicated?</label>
-          <div className="flex flex-wrap gap-4">
-            <label className="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" className="checkbox" checked={!!form.supplier_comm_email} onChange={e=>update('supplier_comm_email', e.target.checked)} /> Email
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" className="checkbox" checked={!!form.supplier_comm_verbal} onChange={e=>update('supplier_comm_verbal', e.target.checked)} /> Verbal
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" className="checkbox" checked={!!form.supplier_comm_form} onChange={e=>update('supplier_comm_form', e.target.checked)} /> Form
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" className="checkbox" checked={!!form.supplier_comm_notification} onChange={e=>update('supplier_comm_notification', e.target.checked)} /> Notification
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" className="checkbox" checked={!!form.supplier_comm_other} onChange={e=>update('supplier_comm_other', e.target.checked)} /> Other
-            </label>
-          </div>
-
-          {commOtherEnabled && (
-            <input className="input mt-2" placeholder="other" value={form.supplier_comm_other_text || ''} onChange={e=>update('supplier_comm_other_text', e.target.value)} />
-          )}
-        </div>
-
-        {/* Inputs */}
-        <div className="pt-2">
-          <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Inputs</div>
-          <label className="form-label">What information is needed?</label>
-          <input className="input" value={form.inputs_what || ''} onChange={e=>update('inputs_what', e.target.value)} />
-          <label className="form-label mt-3">What format is it in?</label>
-          <input className="input" value={form.inputs_format || ''} onChange={e=>update('inputs_format', e.target.value)} />
-        </div>
-
-        {/* Process of Decision Making */}
-        <div className="pt-2">
-          <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Process of decision making</div>
-          <label className="form-label">Describe high level decision making process for this step.</label>
-          <textarea className="input" rows={3} value={form.process_desc || ''} onChange={e=>update('process_desc', e.target.value)} />
-          <label className="form-label mt-3">What is the goal?</label>
-          <input className="input" value={form.process_goal || ''} onChange={e=>update('process_goal', e.target.value)} />
-          <label className="form-label mt-3">Are other people needed to support?</label>
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input type="checkbox" className="checkbox" checked={!!form.process_people} onChange={e=>update('process_people', e.target.checked)} /> Yes
-          </label>
-        </div>
-
-        {/* Outputs */}
-        <div className="pt-2">
-          <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Outputs</div>
-          <label className="form-label">What is the output?</label>
-          <input className="input" value={form.outputs_what || ''} onChange={e=>update('outputs_what', e.target.value)} />
-          <label className="form-label mt-3">What format is it in?</label>
-          <input className="input" value={form.outputs_format || ''} onChange={e=>update('outputs_format', e.target.value)} />
-        </div>
+        {/* Statement / description */}
+        <label className="block text-xs font-medium text-slate-600 mb-1">Statement / Description</label>
+        <textarea
+          value={draft.statement ?? ''}
+          onChange={(e) => update('statement', e.target.value)}
+          rows={4}
+          placeholder="Describe the decision."
+          className="w-full mb-4 rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dtl-teal,#20B2AA)]"
+        />
 
         {/* Timing */}
-        <div className="grid grid-cols-3 gap-3 pt-2">
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="form-label">Queue (min)</label>
-            <input className="input" type="number" value={form.queue_time_min ?? 0}
-              onChange={e=>update('queue_time_min', Number(e.target.value))} />
+            <label className="block text-xs font-medium text-slate-600 mb-1">Queue time (min)</label>
+            <input
+              type="number"
+              value={draft.queue_time_min ?? 0}
+              onChange={(e) => update('queue_time_min', Number(e.target.value))}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dtl-teal,#20B2AA)]"
+            />
           </div>
           <div>
-            <label className="form-label">Action (min)</label>
-            <input className="input" type="number" value={form.action_time_min ?? 0}
-              onChange={e=>update('action_time_min', Number(e.target.value))} />
+            <label className="block text-xs font-medium text-slate-600 mb-1">Action time (min)</label>
+            <input
+              type="number"
+              value={draft.action_time_min ?? 0}
+              onChange={(e) => update('action_time_min', Number(e.target.value))}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--dtl-teal,#20B2AA)]"
+            />
           </div>
         </div>
+
+        {/* You can re-add the full SIPOC fields below later, using the same `update` helper and `?? ''` defaults */}
       </div>
     </aside>
   );
