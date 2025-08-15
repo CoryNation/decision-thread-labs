@@ -44,8 +44,8 @@ function Inner() {
   const [view, setView] = useState<'process' | 'information' | 'opportunities'>('process');
 
   const [decisions, setDecisions] = useState<Decision[]>([]);
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selected, setSelected] = useState<Decision | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
