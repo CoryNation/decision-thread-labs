@@ -85,7 +85,7 @@ function ProjectCanvasInner() {
       id: l.id,
       source: l.from_id,
       target: l.to_id,
-      updatable: { source: true, target: true },
+      updatable: true,
       type: 'straight',
       data: { edgeColor: edgeColorFor(l.kind), pattern: 'solid', arrowStart: false, arrowEnd: true },
       markerEnd: { type: MarkerType.ArrowClosed }
@@ -139,7 +139,7 @@ function ProjectCanvasInner() {
     if (data) {
       setEdges((eds: any) => addEdge({
         id: data.id, source: data.from_id, target: data.to_id, type: 'straight',
-        updatable: { source: true, target: true },
+        updatable: true,
         data: { edgeColor: edgeColorFor(kind), pattern: 'solid', arrowStart: false, arrowEnd: true },
         markerEnd: { type: MarkerType.ArrowClosed }
       }, eds) as any);
@@ -221,7 +221,7 @@ function ProjectCanvasInner() {
           nodes={filteredNodes}
           edges={filteredEdges}
           nodeTypes={nodeTypes}
-          defaultEdgeOptions={{ updatable: { source: true, target: true } }}
+          defaultEdgeOptions={{ updatable: true }}
           connectionMode={ConnectionMode.Loose}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
