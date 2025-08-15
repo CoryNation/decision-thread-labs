@@ -2,9 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import type { Decision, Kind } from '@/types/canvas';
+
+type Props = {
+  decision: Decision;
+  onClose: () => void;
+  onSaved: (d: Decision) => void;
+  onDelete: (id: string) => void;
+};
 
 type Decision = {
-  id: string; project_id: string; kind: 'decision'|'data'|'opportunity'|'gateway';
+  id: string; project_id: string; kind: 'decision'|'data'|'opportunity'|'choice';
   title: string; statement: string | null;
   supplier_who?: string|null;
   supplier_storage?: string|null;
@@ -92,7 +100,7 @@ export default function SipocInspector({
             <option value="decision">Decision</option>
             <option value="data">Data</option>
             <option value="opportunity">Opportunity</option>
-            <option value="gateway">Choice</option>
+            <option value="choice">Choice</option>
           </select>
         </div>
 
