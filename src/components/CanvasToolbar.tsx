@@ -1,5 +1,6 @@
 'use client';
 import React from 'react';
+import type { Decision, Kind, Link } from '@/types/canvas';
 
 type View = 'process' | 'information' | 'opportunities';
 
