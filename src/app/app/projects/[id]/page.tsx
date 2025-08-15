@@ -15,7 +15,32 @@ import StickyNode from '@/components/nodes/StickyNode';
 import DiamondNode from '@/components/nodes/DiamondNode';
 import EdgeInspector from '@/components/EdgeInspector';
 
-import type { Decision, Link, Kind as K } from '@/types/canvas';
+// Types inlined here to avoid external imports mismatch
+type K = 'decision' | 'data' | 'opportunity' | 'choice';
+type Decision = {
+  id: string;
+  project_id: string;
+  kind: K;
+  title: string;
+  statement: string | null;
+  x: number | null;
+  y: number | null;
+  queue_time_min: number | null;
+  action_time_min: number | null;
+};
+type Link = {
+  id: string;
+  project_id: string;
+  from_id: string;
+  to_id: string;
+  kind: string;
+  source_handle?: string | null;
+  target_handle?: string | null;
+  curve?: string | null;
+  pattern?: string | null;
+  arrow_start?: boolean | null;
+  arrow_end?: boolean | null;
+};
 
 const nodeTypes = {
   decision: StickyNode,
@@ -86,7 +111,7 @@ function Inner() {
         isEditing: editingId === d.id,
         ...colorForKind((d.kind || 'decision') as K)
       }
-    }))));
+    })));
 
     setEdges(ls.map((l) => ({
       id: l.id,
