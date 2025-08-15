@@ -1,123 +1,162 @@
 'use client';
 
-// at the top
 import type { Decision, Kind, Link, RFNode, RFEdge } from '@/types/canvas';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import ReactFlow, {
   Background,
   Controls,
   MiniMap,
   MarkerType,
   addEdge,
-  Connection,
+  type Connection,
+  type Edge,
+  type OnConnect,
   ConnectionMode,
-  Edge,
-  Node,
-  OnConnect,
-  OnConnectEnd,
-  OnConnectStart,
   ReactFlowProvider,
-  useEdgesState,
-  useNodesState,
   useReactFlow,
+  useNodesState,
+  useEdgesState,
+  type OnConnectStart,
+  type OnConnectEnd,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
 import { supabase } from '@/lib/supabaseClient';
+
 import CanvasToolbar from '@/components/CanvasToolbar';
 import SipocInspector from '@/components/SipocInspector';
 import EdgeInspector from '@/components/EdgeInspector';
+
 import StickyNode from '@/components/nodes/StickyNode';
 import DiamondNode from '@/components/nodes/DiamondNode';
 
-const nodeTypes = {
+/** Map your node kind to the ReactFlow node component */
+const nodeTypes: Record<Kind, any> = {
   decision: StickyNode,
   data: StickyNode,
   opportunity: StickyNode,
   choice: DiamondNode,
 };
 
-const NODE = 140;
+export default function ProjectCanvasPage() {
+  return (
+    <ReactFlowProvider>
+      <Inner />
+    </ReactFlowProvider>
+  );
+}
 
 function Inner() {
   const { id: projectId } = useParams() as { id: string };
-  const [view, setView] = useState<'process' | 'information' | 'opportunities'>('process');
 
+  const [view, setView] = useState<'process' | 'information' | 'opportunities'>(
+    'process'
+  );
+
+  // ------------ Core state (typed with your aliases) ------------
   const [decisions, setDecisions] = useState<Decision[]>([]);
-const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
-const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
   const [selected, setSelected] = useState<Decision | null>(null);
-  const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<RFEdge | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  // ------------ Connect/drag helpers ------------
+  const flowWrapper = useRef<HTMLDivElement>(null);
   const connectingNodeId = useRef<string | null>(null);
   const connectingFromHandle = useRef<string | null>(null);
-  const didConnectRef = useRef(false);
+  const didConnectRef = useRef<boolean>(false);
 
   const { screenToFlowPosition } = useReactFlow();
 
-  const colorFor = (k: Kind) => {
+  // ------------ Styling helpers ------------
+  const colorForKind = (k: Kind) => {
     if (k === 'data') return { bg: '#DCFCE7', textColor: '#1F7A1F', fold: 'rgba(31,122,31,.22)' };
     if (k === 'opportunity') return { bg: '#CDE3FF', textColor: '#1f2937', fold: 'rgba(30,64,175,.18)' };
-    if (k === 'decision') return { bg: '#FFF7B3', textColor: '#1f2937', fold: 'rgba(0,0,0,.14)' };
-    return { bg: '#F6E7B2', textColor: '#1f2937', fold: 'rgba(0,0,0,.14)' }; // choice (diamond)
+    if (k === 'choice') return { bg: '#F6E7B2', textColor: '#1f2937', fold: 'rgba(0,0,0,.14)' };
+    return { bg: '#FFF7B3', textColor: '#1f2937', fold: 'rgba(0,0,0,.14)' }; // decision (default)
   };
-  const edgeColorFor = (kind: string) => (kind === 'data' ? '#228B22' : '#5A6C80');
+  const edgeColorFor = (k: string) => (k === 'data' ? '#228B22' : '#5A6C80');
 
+  // ------------ Rename handler ------------
   const onRename = useCallback(
     async (id: string, title: string) => {
       await supabase.from('decisions').update({ title }).eq('id', id);
-      setDecisions((p) => p.map((d) => (d.id === id ? { ...d, title } : d)));
-      setNodes((p) =>
-        p.map((n) => (n.id !== id ? n : { ...n, data: { ...n.data, label: (n.type === 'choice' ? 'Choice: ' : '') + title } }))
+      setDecisions((prev) => prev.map((d) => (d.id === id ? { ...d, title } : d)));
+      setNodes((prev) =>
+        prev.map((n) =>
+          n.id !== id
+            ? n
+            : {
+                ...n,
+                data: {
+                  ...n.data,
+                  label: (n.type === 'choice' ? 'Choice: ' : '') + title,
+                },
+              }
+        )
       );
     },
     [setDecisions, setNodes]
   );
 
+  // ------------ Initial load ------------
   const load = useCallback(async () => {
-    const { data: drows } = await supabase
+    const { data: decisionsRaw } = await supabase
       .from('decisions')
-      .select('*')
+      .select(
+        'id, project_id, kind, title, statement, x, y, queue_time_min, action_time_min'
+      )
       .eq('project_id', projectId)
       .order('created_at', { ascending: true });
 
-    const { data: lrows } = await supabase.from('decision_links').select('*').eq('project_id', projectId);
+    const { data: linksRaw } = await supabase
+      .from('decision_links')
+      .select('*')
+      .eq('project_id', projectId);
 
-    const ds = (drows || []) as Decision[];
-    const ls = (lrows || []) as Link[];
+    const ds = (decisionsRaw || []) as Decision[];
+    const ls = (linksRaw || []) as Link[];
 
     setDecisions(ds);
 
-setNodes(
-  ds.map((d): RFNode => ({
-    id: d.id,
-    type: (d.kind || 'decision') as Kind,
-    draggable: true,
-    position: { x: Number(d.x) || 100, y: Number(d.y) || 100 },
-    data: {
-      label: (d.kind === 'choice' ? 'Choice: ' : '') + (d.title || 'Note'),
-      onRename,
-      isEditing: editingId === d.id,
-      ...colorForKind((d.kind || 'decision') as Kind),
-    },
-  }))
-);
+    // Important: explicitly map to RFNode so the generic matches useNodesState<RFNode>
+    setNodes(
+      ds.map<RFNode>((d) => ({
+        id: d.id,
+        type: (d.kind || 'decision') as Kind,
+        draggable: true,
+        position: { x: Number(d.x) || 100, y: Number(d.y) || 100 },
+        data: {
+          label: (d.kind === 'choice' ? 'Choice: ' : '') + (d.title || 'Note'),
+          onRename,
+          // onTabCreate is set below; StickyNode/DiamondNode can read it if present
+          isEditing: editingId === d.id,
+          ...colorForKind((d.kind || 'decision') as Kind),
+        },
+      }))
+    );
 
+    // Map to RFEdge to match useEdgesState<RFEdge>
     setEdges(
-      ls.map((l) => ({
+      ls.map<RFEdge>((l) => ({
         id: l.id,
         source: l.from_id,
         target: l.to_id,
         sourceHandle: l.source_handle || undefined,
         targetHandle: l.target_handle || undefined,
-        type: (l.curve as any) || 'step',
         updatable: true,
+        type: (l.curve as any) || 'step', // 'step' or 'smoothstep'
         data: {
           edgeColor: edgeColorFor(l.kind),
-          pattern: l.pattern || 'solid',
+          pattern: l.pattern || 'solid', // 'solid' | 'dashed' | 'dotted'
           arrowStart: !!l.arrow_start,
           arrowEnd: l.arrow_end !== false,
         },
@@ -131,17 +170,19 @@ setNodes(
             : undefined,
       }))
     );
-  }, [projectId, editingId, onRename]);
+  }, [projectId, editingId, onRename, setNodes, setEdges]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // drag & drop new nodes
+  // ------------ DnD from toolbar ------------
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   }, []);
+
+  const NODE_SIZE = 140;
 
   async function addNodeAt(pos: { x: number; y: number }, kind: Kind, title?: string) {
     const { data } = await supabase
@@ -156,40 +197,51 @@ setNodes(
       .select('*')
       .single();
 
-    if (!data) return null;
-
-    const d = data as Decision;
-    setDecisions((p) => [...p, d]);
-    setNodes((p) => [
-      ...p,
-      {
-        id: d.id,
-        type: d.kind as Kind,
-        draggable: true,
-        position: { x: d.x || 0, y: d.y || 0 },
-        data: { label: (d.kind === 'choice' ? 'Choice: ' : '') + d.title, ...colorFor(d.kind as Kind) },
-      } as Node,
-    ]);
-    return d;
+    if (data) {
+      const d = data as Decision;
+      setDecisions((prev) => [...prev, d]);
+      setNodes((prev) => [
+        ...prev,
+        {
+          id: d.id,
+          type: d.kind as Kind,
+          draggable: true,
+          position: { x: d.x || 0, y: d.y || 0 },
+          data: {
+            label: (d.kind === 'choice' ? 'Choice: ' : '') + d.title,
+            onRename,
+            isEditing: false,
+            ...colorForKind(d.kind as Kind),
+          },
+        } as RFNode,
+      ]);
+      return d;
+    }
+    return null;
   }
 
   const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      const kind = e.dataTransfer.getData('application/reactflow') as Kind;
-      if (!kind || !wrapperRef.current) return;
-      const bounds = wrapperRef.current.getBoundingClientRect();
-      const p = screenToFlowPosition({ x: e.clientX - bounds.left, y: e.clientY - bounds.top });
-      addNodeAt({ x: p.x - NODE / 2, y: p.y - NODE / 2 }, kind);
+    (event: React.DragEvent) => {
+      event.preventDefault();
+      const type = event.dataTransfer.getData('application/reactflow') as Kind;
+      if (!type || !flowWrapper.current) return;
+
+      const bounds = flowWrapper.current.getBoundingClientRect();
+      const p = screenToFlowPosition({
+        x: event.clientX - bounds.left,
+        y: event.clientY - bounds.top,
+      });
+      const position = { x: p.x - NODE_SIZE / 2, y: p.y - NODE_SIZE / 2 };
+      void addNodeAt(position, type);
     },
     [screenToFlowPosition]
   );
 
-  // connections
+  // ------------ Edge connect / create ------------
   const onConnect: OnConnect = useCallback(
     async (c: Connection) => {
       if (!c.source || !c.target) return;
-      didConnectRef.current = true;
+      didConnectRef.current = true; // tell onConnectEnd not to spawn a node
 
       const src = decisions.find((d) => d.id === c.source);
       const tgt = decisions.find((d) => d.id === c.target);
@@ -221,26 +273,31 @@ setNodes(
               target: data.to_id,
               sourceHandle: data.source_handle || undefined,
               targetHandle: data.target_handle || undefined,
-              type: 'step',
               updatable: true,
-              data: { edgeColor: edgeColorFor(kind), pattern: 'solid', arrowStart: false, arrowEnd: true },
+              type: 'step',
+              data: {
+                edgeColor: edgeColorFor(kind),
+                pattern: 'solid',
+                arrowStart: false,
+                arrowEnd: true,
+              },
               markerEnd: { type: MarkerType.ArrowClosed },
             },
             eds
-          )
+          ) as RFEdge[]
         );
       }
     },
-    [projectId, decisions]
+    [projectId, decisions, setEdges]
   );
 
-  const opposite = (h?: string | null) => {
-    if (!h) return undefined;
-    if (h.startsWith('r')) return 'l-tgt';
-    if (h.startsWith('l')) return 'r-tgt';
-    if (h.startsWith('t')) return 'b-tgt';
-    if (h.startsWith('b')) return 't-tgt';
-    return undefined;
+  const oppositeTarget = (srcHandle?: string | null) => {
+    if (!srcHandle) return null;
+    if (srcHandle.startsWith('r')) return 'l-tgt';
+    if (srcHandle.startsWith('l')) return 'r-tgt';
+    if (srcHandle.startsWith('t')) return 'b-tgt';
+    if (srcHandle.startsWith('b')) return 't-tgt';
+    return null;
   };
 
   const onConnectStart: OnConnectStart = useCallback((_e, params) => {
@@ -250,44 +307,58 @@ setNodes(
   }, []);
 
   const onConnectEnd: OnConnectEnd = useCallback(
-    async (e) => {
-      // if a real connect fired, skip
+    async (event) => {
+      // If a real connect already happened, do nothing
       if (didConnectRef.current) {
         didConnectRef.current = false;
         return;
       }
-      const target = e.target as HTMLElement;
-      const isPane = target?.classList?.contains('react-flow__pane');
-      if (!isPane || !wrapperRef.current || !connectingNodeId.current) return;
 
-      const bounds = wrapperRef.current.getBoundingClientRect();
-      const p = screenToFlowPosition({ x: (e as MouseEvent).clientX - bounds.left, y: (e as MouseEvent).clientY - bounds.top });
+      const target = event.target as HTMLElement;
+      const isPane = target.classList.contains('react-flow__pane');
 
-      const src = decisions.find((d) => d.id === connectingNodeId.current);
-      const newNode = await addNodeAt({ x: p.x - NODE / 2, y: p.y - NODE / 2 }, (src?.kind || 'decision') as Kind);
-      if (newNode) {
-        await onConnect({
-          source: connectingNodeId.current!,
-          target: newNode.id,
-          sourceHandle: connectingFromHandle.current || undefined,
-          targetHandle: opposite(connectingFromHandle.current),
+      if (isPane && flowWrapper.current && connectingNodeId.current) {
+        const bounds = flowWrapper.current.getBoundingClientRect();
+        const p = screenToFlowPosition({
+          x: (event as MouseEvent).clientX - bounds.left,
+          y: (event as MouseEvent).clientY - bounds.top,
         });
-        setEditingId(newNode.id);
+
+        const src = decisions.find((d) => d.id === connectingNodeId.current);
+        const newNode = await addNodeAt(
+          { x: p.x - NODE_SIZE / 2, y: p.y - NODE_SIZE / 2 },
+          (src?.kind || 'decision') as Kind
+        );
+
+        if (newNode) {
+          await onConnect({
+            source: connectingNodeId.current!,
+            target: newNode.id,
+            sourceHandle: connectingFromHandle.current || undefined,
+            targetHandle: oppositeTarget(connectingFromHandle.current) || undefined,
+          });
+          setEditingId(newNode.id);
+        }
       }
 
       connectingNodeId.current = null;
       connectingFromHandle.current = null;
+      didConnectRef.current = false;
     },
     [decisions, onConnect, screenToFlowPosition]
   );
 
-  const onNodeDragStop = useCallback(async (_e: any, node: Node) => {
-    await supabase.from('decisions').update({ x: node.position.x, y: node.position.y }).eq('id', node.id);
+  // ------------ Node/edge interactions ------------
+  const onNodeDragStop = useCallback(async (_e: any, node: RFNode) => {
+    await supabase
+      .from('decisions')
+      .update({ x: node.position.x, y: node.position.y })
+      .eq('id', node.id);
   }, []);
 
   const onNodeDoubleClick = useCallback(
-    (_e: any, n: Node) => {
-      const d = decisions.find((x) => x.id === n.id) || null;
+    (_e: any, n: RFNode) => {
+      const d = decisions.find((dd) => dd.id === n.id) || null;
       setSelectedEdge(null);
       setSelected(d);
     },
@@ -296,29 +367,61 @@ setNodes(
 
   const onEdgeDoubleClick = useCallback((_e: any, edge: Edge) => {
     setSelected(null);
-    setSelectedEdge(edge);
+    setSelectedEdge(edge as RFEdge);
   }, []);
 
-  const onEdgeUpdate = useCallback(async (oldEdge: Edge, conn: Connection) => {
+  const onEdgeUpdate = useCallback(async (oldEdge: Edge, connection: Connection) => {
     setEdges((eds) =>
       eds.map((e) =>
         e.id === oldEdge.id
-          ? { ...e, source: conn.source!, target: conn.target!, sourceHandle: conn.sourceHandle, targetHandle: conn.targetHandle }
+          ? {
+              ...e,
+              source: connection.source!,
+              target: connection.target!,
+              sourceHandle: connection.sourceHandle,
+              targetHandle: connection.targetHandle,
+            }
           : e
       )
     );
     await supabase
       .from('decision_links')
       .update({
-        from_id: conn.source,
-        to_id: conn.target,
-        source_handle: conn.sourceHandle || null,
-        target_handle: conn.targetHandle || null,
+        from_id: connection.source,
+        to_id: connection.target,
+        source_handle: connection.sourceHandle || null,
+        target_handle: connection.targetHandle || null,
       })
-      .eq('id', oldEdge.id);
-  }, []);
+      .eq('id', (oldEdge as any).id);
+  }, [setEdges]);
 
-  // filtering by view
+  async function handleTabCreate(sourceId: string) {
+    const src = decisions.find((d) => d.id === sourceId);
+    if (!src) return;
+    const newPos = { x: (src.x || 0) + NODE_SIZE + 48, y: src.y || 0 };
+    const node = await addNodeAt(newPos, (src.kind as Kind) || 'decision', undefined);
+    if (node) {
+      await onConnect({
+        source: sourceId,
+        target: node.id,
+        sourceHandle: 'r-src',
+        targetHandle: 'l-tgt',
+      });
+      setEditingId(node.id);
+    }
+  }
+
+  // Inject the tab-creation callback into node data on each render so new nodes also get it
+  useEffect(() => {
+    setNodes((prev) =>
+      prev.map((n) => ({
+        ...n,
+        data: { ...n.data, onTabCreate: handleTabCreate },
+      }))
+    );
+  }, [setNodes, decisions]); // decisions in deps to keep it fresh while editing
+
+  // ------------ View filters ------------
   const filteredNodes = useMemo(
     () =>
       nodes.map((n) => {
@@ -330,22 +433,29 @@ setNodes(
   );
 
   const filteredEdges = useMemo(() => {
+    if (view === 'information') return edges.map((e) => ({ ...e, hidden: false }));
     if (view === 'opportunities') return edges.map((e) => ({ ...e, hidden: true }));
-    return edges.map((e) => ({ ...e, hidden: false }));
+    return edges;
   }, [edges, view]);
 
+  // ------------ Totals ------------
   const sums = useMemo(() => {
-    const vis = decisions.filter((d) => (view === 'information' ? d.kind === 'data' : view === 'opportunities' ? d.kind === 'opportunity' : true));
-    const q = vis.reduce((a, d) => a + (d.queue_time_min || 0), 0);
-    const a = vis.reduce((b, d) => b + (d.action_time_min || 0), 0);
+    const visible = decisions.filter((d) => {
+      if (view === 'information') return d.kind === 'data';
+      if (view === 'opportunities') return d.kind === 'opportunity';
+      return true;
+    });
+    const q = visible.reduce((a, d) => a + (d.queue_time_min || 0), 0);
+    const a = visible.reduce((a2, d) => a2 + (d.action_time_min || 0), 0);
     return { q, a, t: q + a };
   }, [decisions, view]);
 
+  // ------------ Render ------------
   return (
-    <div className="relative m-4 rounded-2xl border bg-[var(--canvas-bg,#f8f5ef)] overflow-hidden">
+    <div className="relative m-4 rounded-2xl border bg-[var(--canvas-bg)] overflow-hidden">
       <CanvasToolbar view={view} setView={setView} />
 
-      <div ref={wrapperRef} style={{ height: '80vh', overflow: 'hidden' }}>
+      <div ref={flowWrapper} style={{ height: '80vh', overflow: 'hidden' }}>
         <ReactFlow
           nodes={filteredNodes}
           edges={filteredEdges}
@@ -357,17 +467,17 @@ setNodes(
           onConnect={onConnect}
           onConnectStart={onConnectStart}
           onConnectEnd={onConnectEnd}
-          onNodeDoubleClick={onNodeDoubleClick}
-          onNodeDragStop={onNodeDragStop}
-          onEdgeDoubleClick={onEdgeDoubleClick}
-          onEdgeUpdate={onEdgeUpdate}
-          onDrop={onDrop}
-          onDragOver={onDragOver}
           onPaneClick={() => {
             setSelected(null);
             setSelectedEdge(null);
             setEditingId(null);
           }}
+          onNodeDoubleClick={onNodeDoubleClick}
+          onNodeDragStop={onNodeDragStop}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          onEdgeDoubleClick={onEdgeDoubleClick}
+          onEdgeUpdate={onEdgeUpdate}
           fitView
           panOnDrag
           nodesDraggable
@@ -375,8 +485,7 @@ setNodes(
           selectionOnDrag
           snapToGrid
           snapGrid={[24, 24]}
-          edgeUpdaterRadius={40}
-          connectionLineStyle={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
+          edgeUpdaterRadius={30}
         >
           <Background gap={24} size={1} />
           <MiniMap />
@@ -384,7 +493,6 @@ setNodes(
         </ReactFlow>
       </div>
 
-      {/* sums */}
       <div className="absolute left-2 bottom-16 text-xs bg-white/90 rounded px-2 py-1 shadow pointer-events-none">
         <div>Queue: {sums.q} min</div>
         <div>Action: {sums.a} min</div>
@@ -395,18 +503,28 @@ setNodes(
         <SipocInspector
           decision={selected}
           onClose={() => setSelected(null)}
-          onSaved={(d) => {
-            setDecisions((p) => p.map((x) => (x.id === d.id ? { ...x, ...d } : x)));
-            setNodes((p) =>
-              p.map((n) =>
-                n.id === d.id ? { ...n, type: d.kind as Kind, data: { ...n.data, label: (d.kind === 'choice' ? 'Choice: ' : '') + d.title, ...colorFor(d.kind as Kind) } } : n
+          onSaved={(d: Decision) => {
+            setDecisions((prev) => prev.map((x) => (x.id === d.id ? { ...x, ...d } : x)));
+            setNodes((prev) =>
+              prev.map((n) =>
+                n.id === d.id
+                  ? {
+                      ...n,
+                      type: d.kind as Kind,
+                      data: {
+                        ...n.data,
+                        label: (d.kind === 'choice' ? 'Choice: ' : '') + d.title,
+                        ...colorForKind(d.kind as Kind),
+                      },
+                    }
+                  : n
               )
             );
           }}
           onDelete={(id) => {
-            setEdges((p) => p.filter((e) => e.source !== id && e.target !== id));
-            setNodes((p) => p.filter((n) => n.id !== id));
-            setDecisions((p) => p.filter((d) => d.id !== id));
+            setEdges((prev) => prev.filter((e) => e.source !== id && e.target !== id));
+            setNodes((prev) => prev.filter((n) => n.id !== id));
+            setDecisions((prev) => prev.filter((d) => d.id !== id));
           }}
         />
       )}
@@ -419,25 +537,30 @@ setNodes(
             setEdges((eds) =>
               eds.map((e) => {
                 if (e.id !== selectedEdge.id) return e;
-                const nextType = (upd.type as any) || e.type;
-                const mStart = upd.data?.arrowStart ? { type: MarkerType.ArrowClosed } : undefined;
-                const mEnd = upd.data?.arrowEnd ? { type: MarkerType.ArrowClosed } : undefined;
+                const nextType = (upd as any).type || e.type;
+                const mStart = (upd.data?.arrowStart ?? e.data?.arrowStart)
+                  ? { type: MarkerType.ArrowClosed }
+                  : undefined;
+                const mEnd = (upd.data?.arrowEnd ?? e.data?.arrowEnd)
+                  ? { type: MarkerType.ArrowClosed }
+                  : undefined;
+                const pattern = upd.data?.pattern ?? e.data?.pattern;
                 const dash =
-                  upd.data?.pattern === 'dotted' ? '2 6' : upd.data?.pattern === 'dashed' ? '8 6' : undefined;
-                return { ...e, type: nextType, data: { ...(e.data || {}), ...(upd.data || {}) }, markerStart: mStart, markerEnd: mEnd, style: { ...(e.style || {}), strokeDasharray: dash } };
+                  pattern === 'dotted' ? '2 6' : pattern === 'dashed' ? '8 6' : undefined;
+
+                return {
+                  ...e,
+                  type: nextType as any,
+                  data: { ...(e.data || {}), ...(upd.data || {}) },
+                  markerStart: mStart,
+                  markerEnd: mEnd,
+                  style: { ...(e.style || {}), strokeDasharray: dash },
+                };
               })
             );
           }}
         />
       )}
     </div>
-  );
-}
-
-export default function ProjectCanvasPage() {
-  return (
-    <ReactFlowProvider>
-      <Inner />
-    </ReactFlowProvider>
   );
 }
