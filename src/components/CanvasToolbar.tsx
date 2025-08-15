@@ -1,129 +1,76 @@
 'use client';
 import React from 'react';
 
-type Kind = 'decision' | 'data' | 'opportunity' | 'choice';
+type View = 'process' | 'information' | 'opportunities';
 
-export default function CanvasToolbar() {
-  const onDragStart = (e: React.DragEvent, kind: Kind) => {
+export default function CanvasToolbar({
+  view,
+  setView
+}: {
+  view: View;
+  setView: (v: View) => void;
+}) {
+  const onDragStart = (e: React.DragEvent, kind: 'decision' | 'data' | 'opportunity' | 'choice') => {
     e.dataTransfer.setData('application/dtl-kind', kind);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   return (
-    <aside className="w-56 select-none">
-      <div className="mb-2 text-sm font-semibold text-slate-600">View</div>
-      {/* your view dropdown lives above; omitted here for brevity */}
-
-      <div className="mb-2 text-sm font-semibold text-slate-600">Tools</div>
-
-      <div className="grid gap-3">
-        {/* Decision (yellow sticky) */}
-        <div
-          className="tool-tile"
-          draggable
-          onDragStart={(e) => onDragStart(e, 'decision')}
-          title="Decision"
+    <div className="absolute left-4 top-4 z-10 w-64 rounded-xl bg-white/95 shadow-lg ring-1 ring-slate-200">
+      <div className="border-b px-3 py-2">
+        <label className="block text-xs font-semibold text-slate-500 mb-1">View</label>
+        <select
+          value={view}
+          onChange={(e) => setView(e.target.value as View)}
+          className="w-full rounded-md border px-2 py-1 text-sm"
         >
-          <div className="relative" style={{ width: 56, height: 56 }}>
-            <div
-              className="absolute inset-0 m-auto rounded-md border border-slate-300 shadow-sm"
-              style={{ background: '#F9E69B' }} /* yellow */
-            />
-            {/* folded corner */}
-            <div
-              className="absolute bottom-0 right-0"
-              style={{
-                width: 18,
-                height: 18,
-                background: 'transparent',
-                clipPath: 'polygon(100% 0, 0 100%, 100% 100%)',
-              }}
-            />
-            <div
-              className="absolute bottom-[2px] right-[2px]"
-              style={{
-                width: 18,
-                height: 18,
-                background: '#DDBF5A',
-                clipPath: 'polygon(100% 0, 0 100%, 100% 100%)',
-              }}
-            />
-          </div>
-          <div className="text-sm">Decision</div>
-        </div>
+          <option value="process">Decision Process</option>
+          <option value="information">Information Flow</option>
+          <option value="opportunities">Opportunities</option>
+        </select>
+      </div>
 
-        {/* Data (green sticky) */}
-        <div
-          className="tool-tile"
-          draggable
-          onDragStart={(e) => onDragStart(e, 'data')}
-          title="Data / Information"
-        >
-          <div className="relative" style={{ width: 56, height: 56 }}>
-            <div
-              className="absolute inset-0 m-auto rounded-md border border-slate-300 shadow-sm"
-              style={{ background: '#DCFCE7' }} /* forest-green family */
-            />
-            <div
-              className="absolute bottom-[2px] right-[2px]"
-              style={{
-                width: 18,
-                height: 18,
-                background: '#B7E3CB',
-                clipPath: 'polygon(100% 0, 0 100%, 100% 100%)',
-              }}
-            />
-          </div>
-          <div className="text-sm">Data</div>
-        </div>
+      <div className="p-3">
+        <div className="text-xs font-semibold text-slate-500 mb-2">Tools</div>
 
-        {/* Opportunity (blue sticky) */}
-        <div
-          className="tool-tile"
-          draggable
-          onDragStart={(e) => onDragStart(e, 'opportunity')}
-          title="Opportunity"
-        >
-          <div className="relative" style={{ width: 56, height: 56 }}>
-            <div
-              className="absolute inset-0 m-auto rounded-md border border-slate-300 shadow-sm"
-              style={{ background: '#DCEBFF' }} /* blue */
-            />
-            <div
-              className="absolute bottom-[2px] right-[2px]"
-              style={{
-                width: 18,
-                height: 18,
-                background: '#BFD4F6',
-                clipPath: 'polygon(100% 0, 0 100%, 100% 100%)',
-              }}
-            />
+        <div className="grid grid-cols-2 gap-3">
+          {/* Decision sticky */}
+          <div
+            className="cursor-move rounded-md border border-slate-300 bg-[#FFF7B3] p-2 text-center text-[11px] shadow-sm"
+            draggable
+            onDragStart={(e) => onDragStart(e, 'decision')}
+          >
+            Decision
           </div>
-          <div className="text-sm">Opportunity</div>
-        </div>
 
-        {/* Choice (diamond) — replaces legacy "gateway" */}
-        <div
-          className="tool-tile"
-          draggable
-          onDragStart={(e) => onDragStart(e, 'choice')}
-          title="Choice (Diamond)"
-        >
-          <div className="relative" style={{ width: 56, height: 56 }}>
-            <div
-              className="absolute inset-0 m-auto w-8 h-8 rotate-45 rounded-sm border border-slate-300 shadow-sm"
-              style={{ background: '#F6E7B2' }}
-            />
+          {/* Data sticky (forest green family) */}
+          <div
+            className="cursor-move rounded-md border border-slate-300 bg-[#DCFCE7] p-2 text-center text-[11px] shadow-sm"
+            draggable
+            onDragStart={(e) => onDragStart(e, 'data')}
+          >
+            Data
           </div>
-          <div className="text-sm">Choice</div>
+
+          {/* Opportunity sticky (blue) */}
+          <div
+            className="cursor-move rounded-md border border-slate-300 bg-[#CDE3FF] p-2 text-center text-[11px] shadow-sm"
+            draggable
+            onDragStart={(e) => onDragStart(e, 'opportunity')}
+          >
+            Opportunity
+          </div>
+
+          {/* Choice diamond */}
+          <div
+            className="cursor-move rounded-md border border-slate-300 bg-[#F6E7B2] p-2 text-center text-[11px] shadow-sm"
+            draggable
+            onDragStart={(e) => onDragStart(e, 'choice')}
+          >
+            Choice
+          </div>
         </div>
       </div>
-    </aside>
+    </div>
   );
 }
-
-/* Tailwind helper class used above (put this in your globals.css if you haven’t):
-.tool-tile {
-  @apply flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm hover:shadow cursor-grab active:cursor-grabbing;
-}
-*/
