@@ -1,48 +1,53 @@
 'use client';
-import React from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
-import clsx from 'clsx';
 
-type Data = {
-  label: string;
+import { Handle, Position } from 'reactflow';
+
+type Props = {
+  data: {
+    label: string;
+    bg?: string;
+    textColor?: string;
+    border?: string;
+  };
+  selected?: boolean;
 };
 
-export default function DiamondNode({ data, selected }: NodeProps<Data>) {
+export default function DiamondNode({ data, selected }: Props) {
+  const size = 120;
+  const bg = data.bg ?? '#FFF7B3';
+  const stroke = data.border ?? '#94a3b8';
+  const color = data.textColor ?? '#1f2937';
+
   return (
-    <div className="relative" style={{ width: 140, height: 140 }}>
-      {/* diamond */}
+    <div className={`relative ${selected ? 'ring-2 ring-teal-400 rounded-xl' : ''}`} style={{ width: size, height: size }}>
+      {/* Rotated square */}
       <div
-        className={clsx(
-          'absolute inset-0 m-auto rounded-md border border-slate-300 shadow-sm',
-          selected ? 'ring-2 ring-dtl-teal' : ''
-        )}
+        className="absolute inset-0 m-auto rounded-md border shadow-sm"
         style={{
-          width: 98,
-          height: 98,
           transform: 'rotate(45deg)',
-          background: '#F6E7B2'
+          background: bg,
+          borderColor: stroke,
         }}
       />
 
-      {/* label (counter-rotate) */}
+      {/* Label (counter-rotated) */}
       <div
-        className="absolute inset-0 flex items-center justify-center text-[13px] font-medium text-slate-700"
-        style={{ transform: 'rotate(-45deg)' }}
+        className="absolute inset-0 flex items-center justify-center text-sm font-medium"
+        style={{ color, transform: 'rotate(-45deg)' }}
       >
         {data.label}
       </div>
 
-      {/* handles (sources) */}
-      <Handle id="t-src" type="source" position={Position.Top}    style={{ left: 70 }} />
-      <Handle id="r-src" type="source" position={Position.Right}  style={{ top: 70 }} />
-      <Handle id="b-src" type="source" position={Position.Bottom} style={{ left: 70 }} />
-      <Handle id="l-src" type="source" position={Position.Left}   style={{ top: 70 }} />
+      {/* 4-side handles on the bounding box so connection feels natural */}
+      <Handle id="t-tgt" type="target" position={Position.Top} />
+      <Handle id="r-tgt" type="target" position={Position.Right} />
+      <Handle id="b-tgt" type="target" position={Position.Bottom} />
+      <Handle id="l-tgt" type="target" position={Position.Left} />
 
-      {/* handles (targets) */}
-      <Handle id="t-tgt" type="target" position={Position.Top}    style={{ left: 70 }} />
-      <Handle id="r-tgt" type="target" position={Position.Right}  style={{ top: 70 }} />
-      <Handle id="b-tgt" type="target" position={Position.Bottom} style={{ left: 70 }} />
-      <Handle id="l-tgt" type="target" position={Position.Left}   style={{ top: 70 }} />
+      <Handle id="t-src" type="source" position={Position.Top} />
+      <Handle id="r-src" type="source" position={Position.Right} />
+      <Handle id="b-src" type="source" position={Position.Bottom} />
+      <Handle id="l-src" type="source" position={Position.Left} />
     </div>
   );
 }
