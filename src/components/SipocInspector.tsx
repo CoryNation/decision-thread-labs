@@ -114,8 +114,6 @@ export default function SipocInspector({
         />
         <div className="text-xs">How is it communicated?</div>
         <div className="flex flex-wrap gap-3 items-center">
-          {(Array.isArray(draft.supplier_comm)?draft.supplier_comm:[]);
-          }
           {commOptions.map((opt) => (
             <label key={opt} className="inline-flex items-center gap-1 text-xs">
               <input type="checkbox"
