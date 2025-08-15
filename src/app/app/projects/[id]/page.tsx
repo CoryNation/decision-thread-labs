@@ -1,4 +1,5 @@
 'use client';
+import type { Decision, Kind, Link } from '@/types/canvas';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
