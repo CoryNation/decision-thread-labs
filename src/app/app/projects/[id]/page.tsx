@@ -241,7 +241,7 @@ function Inner() {
   async function handleTabCreate(sourceId: string) {
     const src = decisions.find(d => d.id === sourceId); if (!src) return;
     const newPos = { x: (src.x || 0) + NODE_SIZE + 48, y: src.y || 0 };
-    const node = await addNodeAt(newPos, (src.kind as K), undefined);
+    const node = await addNodeAt(newPos, (src.kind as Kind), undefined);
     if (node) {
       await onConnect({ source: sourceId, target: node.id, sourceHandle: 'r-src', targetHandle: 'l-tgt' });
       setEditingId(node.id);
