@@ -29,6 +29,9 @@ import SipocInspector from '@/components/SipocInspector';
 import EdgeInspector from '@/components/EdgeInspector';
 import StickyNode from '@/components/nodes/StickyNode';
 import DiamondNode from '@/components/nodes/DiamondNode';
+import DataEdge from '@/components/edges/DataEdge';
+import ProcessEdge from '@/components/edges/ProcessEdge';
+import OrthEdge from '@/components/edges/OrthEdge';
 
 const nodeTypes = {
   decision: StickyNode,
@@ -36,6 +39,15 @@ const nodeTypes = {
   opportunity: StickyNode,
   choice: DiamondNode,
 } as const;
+
+// Register your custom edge types
+const edgeTypes = {
+  data: DataEdge,
+  process: ProcessEdge,
+  step: OrthEdge,
+  smoothstep: OrthEdge,
+  straight: OrthEdge,
+};
 
 export default function ProjectCanvasPage() {
   return (
@@ -71,7 +83,6 @@ function Inner() {
     if (k === 'data') return { bg: '#DCFCE7', textColor: '#1F7A1F', fold: 'rgba(31,122,31,.22)' };
     if (k === 'opportunity') return { bg: '#CDE3FF', textColor: '#1f2937', fold: 'rgba(30,64,175,.18)' };
     if (k === 'decision') return { bg: '#FFF7B3', textColor: '#1f2937', fold: 'rgba(0,0,0,.14)' };
-    // choice (diamond) still gets colors for label text; the node component controls the visuals
     return { bg: '#F6E7B2', textColor: '#1f2937', fold: 'rgba(0,0,0,.14)' };
   }
 
@@ -115,7 +126,6 @@ function Inner() {
 
     setDecisions(ds);
 
-    // Important: map to FlowNode<NodeData> so it matches useNodesState<NodeData>()
     setNodes(
       ds.map<FlowNode<NodeData>>((d) => ({
         id: d.id,
@@ -125,7 +135,6 @@ function Inner() {
         data: {
           label: (d.kind === 'choice' ? 'Choice: ' : '') + (d.title || 'Note'),
           onRename,
-          onTabCreate: handleTabCreate,
           isEditing: editingId === d.id,
           ...colorForKind(((d.kind || 'decision') as Kind)),
         },
@@ -146,6 +155,7 @@ function Inner() {
           sourceHandle: l.source_handle || undefined,
           targetHandle: l.target_handle || undefined,
           updatable: true,
+          deletable: true, // Enable edge deletion
           type: (l.curve as any) || 'step',
           data: {
             edgeColor: edgeColorFor(l.kind),
@@ -155,7 +165,11 @@ function Inner() {
           },
           markerStart,
           markerEnd,
-          style: dash ? { strokeDasharray: dash } : undefined,
+          style: { 
+            ...(dash ? { strokeDasharray: dash } : {}),
+            stroke: edgeColorFor(l.kind),
+            strokeWidth: 2,
+          },
         };
       })
     );
@@ -197,7 +211,6 @@ function Inner() {
         data: {
           label: (d.kind === 'choice' ? 'Choice: ' : '') + (d.title || 'New item'),
           onRename,
-          onTabCreate: handleTabCreate,
           isEditing: false,
           ...colorForKind(d.kind as Kind),
         },
@@ -227,7 +240,7 @@ function Inner() {
   const onConnect: OnConnect = useCallback(
     async (c: Connection) => {
       if (!c.source || !c.target) return;
-      didConnectRef.current = true; // prevent onConnectEnd from auto-adding
+      didConnectRef.current = true;
 
       const src = decisions.find((d) => d.id === c.source);
       const tgt = decisions.find((d) => d.id === c.target);
@@ -260,6 +273,7 @@ function Inner() {
               sourceHandle: data.source_handle || undefined,
               targetHandle: data.target_handle || undefined,
               updatable: true,
+              deletable: true,
               type: 'step',
               data: {
                 edgeColor: edgeColorFor(kind),
@@ -268,6 +282,10 @@ function Inner() {
                 arrowEnd: true,
               },
               markerEnd: { type: MarkerType.ArrowClosed },
+              style: {
+                stroke: edgeColorFor(kind),
+                strokeWidth: 2,
+              },
             },
             eds
           )
@@ -294,7 +312,6 @@ function Inner() {
 
   const onConnectEnd: OnConnectEnd = useCallback(
     async (event) => {
-      // If a real connect already happened, skip
       if (didConnectRef.current) {
         didConnectRef.current = false;
         return;
@@ -352,6 +369,7 @@ function Inner() {
     setSelectedEdge(edge);
   }, []);
 
+  // Fixed edge update with database persistence
   const onEdgeUpdate = useCallback(async (oldEdge: FlowEdge<EdgeData>, connection: Connection) => {
     setEdges((eds) =>
       eds.map((e) =>
@@ -366,6 +384,7 @@ function Inner() {
           : e
       )
     );
+    
     await supabase
       .from('decision_links')
       .update({
@@ -376,6 +395,19 @@ function Inner() {
       })
       .eq('id', oldEdge.id);
   }, [setEdges]);
+
+  // Add edge deletion functionality
+  const onEdgesDelete = useCallback(async (edgesToDelete: FlowEdge<EdgeData>[]) => {
+    const edgeIds = edgesToDelete.map(edge => edge.id);
+    
+    // Delete from database
+    await supabase
+      .from('decision_links')
+      .delete()
+      .in('id', edgeIds);
+    
+    // Update local state (ReactFlow handles this automatically via onEdgesChange)
+  }, []);
 
   async function handleTabCreate(sourceId: string) {
     const src = decisions.find((d) => d.id === sourceId);
@@ -394,10 +426,56 @@ function Inner() {
     }
   }
 
-  // Keep onTabCreate attached to node data after loads
-  useEffect(() => {
-    setNodes((prev) => prev.map((n) => ({ ...n, data: { ...n.data, onTabCreate: handleTabCreate } })));
-  }, [setNodes, decisions]);
+  // Enhanced EdgeInspector change handler with database persistence
+  const handleEdgeChange = useCallback(async (updatedEdge: any) => {
+    const edgeId = selectedEdge?.id;
+    if (!edgeId) return;
+
+    // Update local state
+    setEdges((eds) =>
+      eds.map((e) => {
+        if (e.id !== edgeId) return e;
+        
+        const type = updatedEdge.type || e.type;
+        const newData = { ...(e.data || {}), ...(updatedEdge.data || {}) };
+        const markerStart = newData.arrowStart ? { type: MarkerType.ArrowClosed } : undefined;
+        const markerEnd = newData.arrowEnd !== false ? { type: MarkerType.ArrowClosed } : undefined;
+        const dash =
+          newData.pattern === 'dotted' ? '2 6' : newData.pattern === 'dashed' ? '8 6' : undefined;
+
+        return {
+          ...e,
+          type,
+          data: newData,
+          markerStart,
+          markerEnd,
+          style: { 
+            ...(e.style || {}), 
+            strokeDasharray: dash,
+            stroke: newData.edgeColor || e.style?.stroke,
+            strokeWidth: 2,
+          },
+        };
+      })
+    );
+
+    // Persist to database
+    const updateData: any = {};
+    if (updatedEdge.type) updateData.curve = updatedEdge.type;
+    if (updatedEdge.data?.pattern) updateData.pattern = updatedEdge.data.pattern;
+    if (updatedEdge.data?.arrowStart !== undefined) updateData.arrow_start = updatedEdge.data.arrowStart;
+    if (updatedEdge.data?.arrowEnd !== undefined) updateData.arrow_end = updatedEdge.data.arrowEnd;
+
+    if (Object.keys(updateData).length > 0) {
+      await supabase
+        .from('decision_links')
+        .update(updateData)
+        .eq('id', edgeId);
+    }
+
+    // Update the selectedEdge to reflect changes
+    setSelectedEdge(prev => prev ? { ...prev, ...updatedEdge } : null);
+  }, [selectedEdge?.id, setEdges]);
 
   const filteredNodes = useMemo(
     () =>
@@ -435,10 +513,12 @@ function Inner() {
           nodes={filteredNodes}
           edges={filteredEdges}
           nodeTypes={nodeTypes}
-          defaultEdgeOptions={{ updatable: true, type: 'step' }}
+          edgeTypes={edgeTypes} // Register custom edge types
+          defaultEdgeOptions={{ updatable: true, deletable: true, type: 'step' }}
           connectionMode={ConnectionMode.Loose}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
+          onEdgesDelete={onEdgesDelete} // Handle edge deletion
           onConnect={onConnect}
           onConnectStart={onConnectStart}
           onConnectEnd={onConnectEnd}
@@ -461,6 +541,7 @@ function Inner() {
           snapToGrid
           snapGrid={[24, 24]}
           edgeUpdaterRadius={30}
+          deleteKeyCode={['Backspace', 'Delete']} // Enable delete key for edges
         >
           <Background gap={24} size={1} />
           <MiniMap />
@@ -508,27 +589,7 @@ function Inner() {
         <EdgeInspector
           edge={selectedEdge}
           onClose={() => setSelectedEdge(null)}
-          onChange={(upd) => {
-            setEdges((eds) =>
-              eds.map((e) => {
-                if (e.id !== selectedEdge.id) return e;
-                const type = (upd as any).type || e.type;
-                const udata = (upd as any).data || {};
-                const markerStart = udata.arrowStart ? { type: MarkerType.ArrowClosed } : undefined;
-                const markerEnd = udata.arrowEnd ? { type: MarkerType.ArrowClosed } : undefined;
-                const dash =
-                  udata.pattern === 'dotted' ? '2 6' : udata.pattern === 'dashed' ? '8 6' : undefined;
-                return {
-                  ...e,
-                  type,
-                  data: { ...(e.data || {}), ...udata },
-                  markerStart,
-                  markerEnd,
-                  style: { ...(e.style || {}), strokeDasharray: dash },
-                };
-              })
-            );
-          }}
+          onChange={handleEdgeChange}
         />
       )}
     </div>
